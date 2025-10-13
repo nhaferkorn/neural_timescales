@@ -6,24 +6,27 @@ from pathlib import Path
 
 from mne_bids import BIDSPath, print_dir_tree, write_raw_bids
 
-from src.setup import *
+from src.setup_analysis import *
 
 # Get the data
 print(data_dir)
 
-# initialize as a directory - this is not really necessary
-raws = {}
-events = {}
+# initialize as a directory - this is not really necessary; but appending it to a list should also work
+raws = list()
+events = list()
 
 for file in eeg_dir.glob('*.bdf'):
-    raws[file] = mne.io.read_raw_bdf(file, preload=False)
-    
+    raw = mne.io.read_raw_bdf(file, preload=False)
+    raws.append(raw)
+
 print(raws)
 
 # this actually works
-for file in eeg_dir.glob('*.bdf'):
-    events[file] = mne.find_events(raws[file], stim_channel="Status", initial_event=False)
-    mne.write_events(eeg_dir / f"events._{file.stem}.tsv", events[file])
+for raw in raws:
+    event = mne.find_events(raw, stim_channel="Status", initial_event=False)
+    events.append(mne.write_events(eeg_dir / f"events_{raw}.tsv", event))
+
+print(events)
 
 
 # for file in os.listdir(data_dir):
@@ -56,6 +59,22 @@ if bids_root.exists():
 else:
     print("Creating BIDS root directory")
     bids_root.mkdir()
+
+
+# extract subject ID from file names
+
+# subject_id = list(range(1,61))
+subject_ids = [1, 2, 3]
+
+
+# for subject_id in subject_ids:
+
+
+
+
+
+
+
 
 
 # let's write the BIDS data
