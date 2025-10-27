@@ -1,88 +1,131 @@
-########## Converts EDF data to BIDS format ##################
+"""Converts BDF data to BIDS format."""
 
-# make relevant imports
-import shutil
-from pathlib import Path
+import os
+import glob
+
+import re
 
 import mne
-import os
 
 from mne_bids import BIDSPath, print_dir_tree, write_raw_bids
-<<<<<<< HEAD
-
-from src.setup_analysis import *
-
-# Get the data
-print(data_dir)
-
-# initialize as a directory - this is not really necessary; but appending it to a list should also work
-raws = list()
-events = list()
-
-for file in eeg_dir.glob('*.bdf'):
-    raw = mne.io.read_raw_bdf(file, preload=False)
-    raws.append(raw)
-
-print(raws)
-
-# this actually works
-for raw in raws:
-    event = mne.find_events(raw, stim_channel="Status", initial_event=False)
-    events.append(mne.write_events(eeg_dir / f"events_{raw}.tsv", event))
-
-print(events)
-=======
-from mne_bids.stats import count_events
->>>>>>> parent of bac3d5b (reading multiple bdf files & event files)
 
 
-# Get the data 
-data_directory = "C:/Users/neleh/OneDrive - Radboud Universiteit/Documents/CNS_Master/Master_Thesis/neural_timescales/data"
-# data_dir = Path(mne.get_config("C:/Users/neleh/OneDrive - Radboud Universiteit/Documents/CNS_Master/Master_Thesis/neural_timescales/data"))
-raw = mne.io.read_raw_bdf(os.path.join(data_directory,'101.bdf'), preload=False)
+# Set-up directory structure
+root_dir = os.path.expanduser('~/OneDrive - Radboud Universiteit/Documents/CNS_Master/Master_Thesis/neural_timescales') # to be replaced with respective directory
+data_dir = os.path.normpath(os.path.join(root_dir, 'data'))
+eeg_dir = os.path.join(data_dir,  'eeg')
+behavior_dir = os.path.join(data_dir,  'behavior')
 
-print(raw)
-events = mne.find_events(raw, stim_channel="Status", initial_event=False)
+# Path to BIDS root directory
+bids_root = os.path.join(data_dir, 'data_bids')
 
-#write events to tsv file (I need to adjust path)
-mne.write_events("events.tsv", events)
-# write_raw_bids() tries to extract as much meta data as possible from the raw data and then formats it in a BIDS compatible way
-subject_id = "01"
+def data2bids():
+    """Provide docstring for data2bids function!
+    """
+    # check if eeg and behavioral subdirectories exist in data_dir
+    for file in os.scandir(data_dir):
+        print(f"{file} - {'dir' if file.is_dir() else 'file'}")
 
-# define a tasl name and a directory where to save the data to
-task = "dseeg"
+    if os.path.exists(eeg_dir):
+        print("EEG directory exists")
 
-## this is not good practice - I need to change this!
-## add control flow statement - and check whether this directory already consists, if not create it
-bids_root = "C:\\Users\\neleh\\OneDrive - Radboud Universiteit\\Documents\\CNS_Master\\Master_Thesis\\neural_timescales\\data\\data_bids"
-
-# extract subject ID from file names
-
-# subject_id = list(range(1,61))
-subject_ids = [1, 2, 3]
+    else:
+        print("Creating EEG directory")
+        os.mkdir(eeg_dir)
 
 
-# for subject_id in subject_ids:
+    task = "dseeg"
+
+    event_dict = dict(zip(['Start Practice Trial',
+                        'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 
+                        'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target',
+                        'Response Natural', 'Response Manmade', 'Response None Enc',
+                        'Fixation Onset Enc', 'Cue Onset', 'Rest onset', 'Rest offset', 'End Encoding',
+                        'Start Retrieval', 'Retrieval Stimulus Onset Baseline Left', 'Retrieval Stimulus Onset Baseline Right',
+                        'Retrieval Stimulus Onset Distraction Left Target', 'Retrieval Stimulus Onset Distraction Right Target',
+                        'Retrieval Stimulus Onset Distraction Right Distractor', 'Retrieval Stimulus Onset Distraction Left Distractor',
+                        'Retrieval Stimulus Onset New', 'Response Old', 'Response New', 'Response None ON',
+                        'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
+                        'Fixation Onset Ret', 'End Retrieval'],[99,
+                        21,22,
+                        23,24,
+                        33,35,38,
+                        40,45,90,91,13,
+                        50,51,52,
+                        53,54,
+                        55,56,
+                        57,63,65,68,
+                        70,73,75,77,78,
+                        80,93,
+                        ],
+    ))
+
+# but this is definitely not a long term solution - mne python just doesn't really like it when 
+    event_dict.update({
+    'stimulus_10': 10,
+    'stimulus_65536': 65536,
+    })
 
 
+# def eeg2bids():
+
+# initialize empty lists
+    raws = list()
+    events = list()
+    subject_ids = list()
+
+    for (root, dirs, files)  in os.walk(eeg_dir):
+        print(files)
+        for file in files:
+            if file.endswith('.bdf'):
+                file_path = os.path.join(root, file)
+                print(f"Loading: {file_path}")
+                raw = mne.io.read_raw_bdf(file_path, preload=False) # make sure to include overwrite checkpoint
+                raws.append(raw)
+                # obtain events 
+                event = mne.find_events(raw, stim_channel = "Status", initial_event=False)
+                event[:,2] = event[:, 2] - 64512
+                events.append(event)
+
+                # obtain subject ID
+                subject_id = file.split('.')[0]
+                print(subject_id)
+                subject_ids.append(subject_id)
+
+    print(raws)
+    print(events)
+    print(subject_ids)
+
+    # set up
+    if os.path.exists(bids_root):
+        print("BIDS root directory exists")
+
+    else:
+        print("Creating BIDS root directory")
+        os.mkdir(bids_root)
 
 
+    # extract subject ID from file names - use re module here
+    bids_list = list()
 
+    for subject_id in subject_ids: 
+        bids_path = BIDSPath(
+        subject=f"{subject_id[-2:]}",
+        task=task,
+        root=bids_root,
+       )
+        bids_list.append(bids_path)
 
+    for raw, event, bids_path in zip(raws, events, bids_list):
+        write_raw_bids(
+        raw,
+        bids_path,
+        events=event,
+        event_id=event_dict,
+        overwrite=True  
+        )
 
+    return raws, events, subject_ids
 
-
-# let's write the BIDS data
-bids_path = BIDSPath(subject = subject_id, task = task, root=bids_root)
-
-# check how to add the events file to the BIDS path
-bids_path.update(subject="01", task="dseeg", suffix="events", extension=".tsv"
-)
-write_raw_bids(raw, bids_path, overwrite=True)
-
-# and print fresh BIDS directory - nice, this seems to work
-print_dir_tree(bids_root)
-
-# get an overview of the events on the whole dataset - this doesn't work, because events.tsv file is not created automatically from bdf file
-# counts = count_events(bids_root)
-# counts
+if __name__  == "__main__":
+    data2bids()
