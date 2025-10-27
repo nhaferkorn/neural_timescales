@@ -1,0 +1,31 @@
+    """Set up of all experimental variables and Paths.
+    """
+description                         = ['Start Practice Trial',
+                                    'Start Encoding', 'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 
+                                    'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target',
+                                    'Response Natural', 'Response Manmade', 'Response None Enc',
+                                    'Fixation Onset Enc', 'Cue Onset', 'Rest onset', 'Rest offset', 'End Encoding',
+                                    'Start Retrieval', 'Retrieval Stimulus Onset Baseline Left', 'Retrieval Stimulus Onset Baseline Right',
+                                    'Retrieval Stimulus Onset Distraction Left Target', 'Retrieval Stimulus Onset Distraction Right Target',
+                                    'Retrieval Stimulus Onset Distraction Right Distractor', 'Retrieval Stimulus Onset Distraction Left Distractor',
+                                    'Retrieval Stimulus Onset New', 'Response Old', 'Response New', 'Response None ON',
+                                    'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
+                                    'Fixation Onset Ret', 'End Retrieval',
+                                    'Begin Localizer/End Localizer', 'Centre', 'Bottom Right', 'Bottom Left',
+                                    'Middle Left', 'Middle Right', 'Bottom Middle',
+                                    '2/3 Left', '2/3 Right']
+
+original_marker                     = [99,
+                                    10,21,22,
+                                    23,24,
+                                    33,35,38,
+                                    40,45,90,91,13,
+                                    50,51,52,
+                                    53,54,
+                                    55,56,
+                                    57,63,65,68,
+                                    70,73,75,77,78,
+                                    80,93,
+                                    30,1,2,3,
+                                    4,5,6,
+                                    7,8]
