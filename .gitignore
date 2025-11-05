@@ -1,3 +1,10 @@
 \data
 \docs
 *.egg-info
+
+# Ignore notebook checkpoint files
+*/.ipynb_checkpoints/*
+
+# Ignore cache files
+*/__pycache__/*
+cachedir/*
