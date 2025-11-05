@@ -11,7 +11,6 @@ from mne_bids import BIDSPath, print_dir_tree, write_raw_bids
 
 from src.settings import ROOT_DIR, DATA_DIR, EEG_DIR, BIDS_ROOT, TASK, EVENT_DICT
 
-
 def data2bids():
     """Provide docstring for data2bids function!
     """
@@ -39,6 +38,7 @@ def data2bids():
                 print(f"Loading: {file_path}")
                 raw = mne.io.read_raw_bdf(file_path, preload=False) # make sure to include overwrite checkpoint
                 raws.append(raw)
+
                 # obtain events 
                 event = mne.find_events(raw, stim_channel = "Status", initial_event=False)
                 event[:,2] = event[:, 2] - 64512
@@ -60,7 +60,6 @@ def data2bids():
     else:
         print("Creating BIDS root directory")
         os.mkdir(BIDS_ROOT)
-
 
     # extract subject ID from file names - use re module here
     bids_list = list()
