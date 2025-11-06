@@ -1,3 +1,2 @@
-# neural_timescales
-
-A truly neutral research cookie cutter
+# Neural Timescales in task-based EEG
+This repository contains the code for timescale estimation in EEG data (episodic memory task).
