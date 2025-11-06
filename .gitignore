@@ -3,8 +3,8 @@
 *.egg-info
 
 # Ignore notebook checkpoint files
-*/.ipynb_checkpoints/*
+*\.ipynb_checkpoints\*
 
 # Ignore cache files
-*/__pycache__/*
-cachedir/*
+*\__pycache__\*
+cachedir\*

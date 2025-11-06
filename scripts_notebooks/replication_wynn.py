@@ -26,10 +26,6 @@ events = mne.find_events(raw, stim_channel="Status", initial_event=False)
 events[:,2] = events[:, 2] - 64512
 print(events)
 
-# filtered the data between 0.5 and 30 Hz; apply to copy to not change raw object
-raw_filtered = raw.copy().filter(l_freq = 0.5, h_freq=30)
-events_eog = mne.preprocessing.find_eog_events(raw_filtered)
-
 # set average reference (but only set after removing bad periods, because otherwise it will spread)
 # raw_avg_ref = raw_filtered.set_eeg_reference(ref_channels = "average")
 

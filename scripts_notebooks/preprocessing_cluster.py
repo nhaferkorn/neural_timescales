@@ -14,6 +14,10 @@ from src.settings import DATA_DIR, BIDS_ROOT, EVENT_DICT, EVENT_DICT_CLEAN, REPO
 
 # def main():
 
+
+# so basically I have to define a function with subject ID as input 
+# then I guess I can also skip the lists 
+
 ########################################################
 ## SETUP
 
@@ -38,7 +42,7 @@ for sub_id in sub_ids:
 # print(raw_files) 
 
 #########################################################
-## RUN ACROSS SUBJECTS (that is something that I can specify in cluster)
+## RUN ACROSS SUBJECTS - yeah, subject ID as input
 
 # fix subj_label extraction & make code flexible: such that you can decide which subjects to run
 # load raw files for each subject
