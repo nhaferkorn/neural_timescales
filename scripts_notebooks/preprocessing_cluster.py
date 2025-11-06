@@ -3,10 +3,10 @@
 import os
 import numpy as np
 import mne
+import sys
 import glob
 import re
 
-# think about how this translates to the cluster
 from src.settings import DATA_DIR, BIDS_ROOT, EVENT_DICT, EVENT_DICT_CLEAN, REPORT_DIR, DERIV_DIR
 
 ###################################################################################################
@@ -14,19 +14,11 @@ from src.settings import DATA_DIR, BIDS_ROOT, EVENT_DICT, EVENT_DICT_CLEAN, REPO
 
 # def main():
 
-
-# so basically I have to define a function with subject ID as input 
-# then I guess I can also skip the lists 
-
-########################################################
 ## SETUP
-
-subjs_list = list()
-subjs_dirs = list()
-raw_files = list()
 
 RUN_ICA = True
 RUN_EPOCHS = False
+
 
 # list subjects directory - this part of the code is way to complicated and could be more straightforward
 sub_ids = [item for item in os.listdir(BIDS_ROOT)
