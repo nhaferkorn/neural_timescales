@@ -1,6 +1,7 @@
 \data
 \docs
 *.egg-info
+*.out
 
 # Ignore notebook checkpoint files
 *\.ipynb_checkpoints\*

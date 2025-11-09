@@ -5,11 +5,11 @@ import re
 import glob
 
 # Set-up directory structure
-ROOT_DIR = os.path.expanduser('~/OneDrive - Radboud Universiteit/Documents/CNS_Master/Master_Thesis/neural_timescales') # to be replaced with respective directory
-DATA_DIR = os.path.normpath(os.path.join(ROOT_DIR, 'data'))
-EEG_DIR = os.path.join(DATA_DIR,  'eeg')
-BEHAV_DIR = os.path.join(DATA_DIR,  'behavior')
-DERIV_DIR = os.path.join(DATA_DIR, "derivatives")
+PROJECT_DIR = '/project/4180000.57/neural_timescales/' # to be replaced with respective directory
+DATA_DIR = os.path.join(os.path.join(PROJECT_DIR, 'data'))
+EEG_DIR = os.path.join(DATA_DIR,  'EEGData')
+BEHAV_DIR = os.path.join(DATA_DIR,  'BEHAVData')
+DERIV_DIR = os.path.join(DATA_DIR, "Derivatives")
 
 
 # Path to BIDS root directory
@@ -28,10 +28,9 @@ for subj in glob.glob(os.path.join(BIDS_ROOT, "sub-*")):
 # Set up experimental variables
 TASK = "dseeg"
 
-REPORT_DIR = os.path.join(ROOT_DIR, "docs")
-
-# DERIVATIVES_DIR = os.path.join(ROOT_DIR, "derivatives")
-# make subject folders in derivatives directory!
+# REPORT_DIR = os.path.join(PROJECT_DIR, "docs")
+# DERIVATIVES_DIR = os.path.join(DATA_DIR, "derivatives")
+# # make subject folders in derivatives directory!
 
 
 DESCRIPTION = ['Misc_Offset', 'Start Practice Trial',

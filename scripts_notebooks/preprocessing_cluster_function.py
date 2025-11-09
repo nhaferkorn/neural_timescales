@@ -1,46 +1,96 @@
 """This script pre-processes the raw EEG data."""
 
 import os
+import sys
 import numpy as np
 import mne
 import glob
 import re
 
 # think about how this translates to the cluster
-from src.settings import DATA_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, REPORT_DIR, DERIV_DIR
+sys.path.append('/project/4180000.57/neural_timescales/src')
 
+# not sure if this works
+from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_DIR
 
 ########################################################
 ## SETUP
 
-# specify directories 
-# or maybe it actually works if I import it...
+# PROJECT_DIR = '/project/4180000.57/neural_timescales/' # to be replaced with respective directory
+# DATA_DIR = os.path.join(os.path.join(PROJECT_DIR, 'data'))
+# EEG_DIR = os.path.join(DATA_DIR,  'EEGData')
+# BEHAV_DIR = os.path.join(DATA_DIR,  'BEHAVData')
+# DERIV_DIR = os.path.join(DATA_DIR, "Derivatives")
 
-RUN_ICA = True
+
+DESCRIPTION = ['Misc_Offset', 'Start Practice Trial',
+'Start Encoding', 'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 
+'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target',
+'Response Natural', 'Response Manmade', 'Response None Enc',
+'Fixation Onset Enc', 'Cue Onset', 'Rest onset', 'Rest offset', 'End Encoding',
+'Start Retrieval', 'Retrieval Stimulus Onset Baseline Left', 'Retrieval Stimulus Onset Baseline Right',
+'Retrieval Stimulus Onset Distraction Left Target', 'Retrieval Stimulus Onset Distraction Right Target',
+'Retrieval Stimulus Onset Distraction Right Distractor', 'Retrieval Stimulus Onset Distraction Left Distractor',
+'Retrieval Stimulus Onset New', 'Response Old', 'Response New', 'Response None ON',
+'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
+'Fixation Onset Ret', 'End Retrieval',
+'Begin Localizer/End Localizer', 'Centre', 'Bottom Right', 'Bottom Left',
+'Middle Left', 'Middle Right', 'Bottom Middle',
+'2/3 Left', '2/3 Right']
+
+
+# not sure about the 65536 value...
+ORIGINAL_MARKER = [65536, 99,
+10,21,22,
+23,24,
+33,35,38,
+40,45,90,91,13,
+50,51,52,
+53,54,
+55,56,
+57,63,65,68,
+70,73,75,77,78,
+80,93,
+30,1,2,3,
+4,5,6,
+7,8]
+
+
+EVENT_DICT = dict(zip(DESCRIPTION, ORIGINAL_MARKER))
+
+
+
+RUN_ICA = False
 RUN_EPOCHS = False
+RUN_EVOKED = False
 
-# i somehow need to specify jobs for the individual subjects; I guess I would also need to run eeg2bids first
+# set system variables
+param1 = sys.argv[1]
 
-def preprocessing(subj_id):
+def preprocessing(sub):
 
     # Print subject label and running
-    print('\nCURRENTLY RUNNING SUBJECT: ', subj_id, '\n')
+    print('\nCURRENTLY RUNNING SUBJECT: ', sub, '\n')
 
-    rawfile = glob.glob(os.path.join(EEG_DIR, "*.bdf"))
+    # not sure if this works - do I need even need glob.glob in that case?
+    rawfile = os.path.join(EEG_DIR, "%s.bdf") % sub
+
+    print(rawfile)
 
     raw = mne.io.read_raw_bdf(rawfile, preload=True, eog = ["EXG1", "EXG2", "EXG3", "EXG4"], misc = ["EXG5", "EXG6", "EXG7", "EXG8"], stim_channel="STATUS")
+    
     raw = raw.drop_channels(ch_names = ["EXG7", "EXG8"])
 
-    # okay, so  I have to set montage directly on raw object (and not a copy of it!) > this creates a new entry in the info object
+    # set montage directly on raw object (and not a copy of it!) > this creates a new entry in info object
     raw.set_montage("biosemi32", on_missing = "ignore")
 
     # filter the data
     raw_filtered = raw.copy().filter(l_freq = 0.1, h_freq=45)
 
     # instantiate report object and specify output directory
-    report = mne.Report(title= f"Sub-{subj_id} Report")
-    # yeah, I don't think it is possible to save it as a pdf
-    output_path = os.path.join(REPORT_DIR, f"subject{subj_id}_report.html")
+    # report = mne.Report(title= f"Sub-{sub} Report")
+    # # yeah, I don't think it is possible to save it as a pdf
+    # output_path = os.path.join(REPORT_DIR, f"subject{sub}_report.html")
     
     # find events
     events = mne.find_events(raw, stim_channel = "Status", initial_event=False)
@@ -51,14 +101,16 @@ def preprocessing(subj_id):
 
     events_of_interest = {k: EVENT_DICT[k] for k in keys}
 
-    report.add_events(events=events, title='Events Plot', sfreq = raw.info['sfreq'])
-    report.save(output_path, overwrite=True)
+    # report.add_events(events=events, title='Events Plot', sfreq = raw.info['sfreq'])
+    # report.save(output_path, overwrite=True)
 
     # save events plot in derivatives directory 
     fig = mne.viz.plot_events(
     events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest)
-    fig.suptitle(f"Events-{subj_id}", fontsize=14)
-    fig.savefig(os.path.join(DERIV_DIR, f'events_{subj_id}.png'))
+    fig.suptitle(f"Events-{sub}", fontsize=14)
+
+    fig.savefig(os.path.join(DERIV_DIR, f'events_{sub}.png'))
+
 
     if RUN_ICA:
             raw_ica_filtered = raw.copy().filter(l_freq = 1, h_freq=40)
@@ -66,13 +118,10 @@ def preprocessing(subj_id):
             ica.fit(raw_ica_filtered)
 
             # plot components
-            fig = ica.plot_components(title=f"ICs for {subj_id}")
-            fig.savefig(os.path.join(DERIV_DIR, f'ics_{subj_id}.png'))
+            fig = ica.plot_components(title=f"ICs for {sub}")
+            fig.savefig(os.path.join(DERIV_DIR, f'ics_{sub}.png'))
 
-            # it might also makes sense to save the subjects ICA solution 
-    else:
-        continue
-
+            # save subjects solution 
 
 
 
@@ -113,41 +162,30 @@ def preprocessing(subj_id):
 
     
     
-    
-    
-    
     ## EVOKED RESPONSES 
 
-    # compute evoked response; epochs are averaged in a channel-wise fashion
-    evoked_enc_base_left = epochs["Encoding Stimulus Onset Baseline Left"].average()
+    if RUN_EVOKED:
 
-    evoked_enc_base_left.plot(titles="left encoding")
+        # compute evoked response
+        epochs = mne.Epochs(raw_filtered, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None, reject = reject_criteria, flat = flat_criteria)
+        
+        evoked_left = epochs_left_after_rejection.average().plot(titles=f"{sub} Evoked - Left Attend", picks = 'eeg')
+        evoked_right = epochs_right_after_rejection.average().plot(titles=f"{sub} Evoked - Right Attend", picks = 'eeg')
+        evoked_base = epochs[["Encoding Stimulus Onset Baseline Left", "Encoding Stimulus Onset Baseline Right"]].average().plot(titles=f"{sub} Evoked - Low Distraction Attend", picks = 'eeg')
+        evoked_dist = epochs[["Encoding Stimulus Onset Distraction Left Target", "Encoding Stimulus Onset Distraction Right Target"]].average().plot(titles=f"{sub} Evoked - High Distraction Attend", picks = 'eeg')
+        evoked_cue = epochs["Fixation Onset Enc"].average().plot(titles=f"{sub} Evoked - Fixation Cue", picks = 'eeg')
+ 
+        # pick occipital electrodes
+        # picks = mne.pick_channels(raw.info["ch_names"], ['O1', 'Oz' ,'O2'])
+    
+      
+        # now, we get a much flatter power spectrum
+        enc_pooled_left = epochs[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']].average().plot()
+
+        # Evoked estimates for retieval phase
+        evoked_ret_dist_left = epochs['Retrieval Stimulus Onset Distraction Left Target'].average().plot()
+        evoked_ret_base_left = epochs['Retrieval Stimulus Onset Baseline Left'].average().plot()
 
 
-    ## plot evoked response relative to Fixation Onset Encoding - we see a decay in power over time (which makes sense, but is also interesting)
-    evoked_enc_fix = epochs["Fixation Onset Enc"].average()
-    evoked_enc_fix.plot()
-
-    # Compare left vs. right presented stimuli in encoding phase 
-    # pick occipital electrodes
-    picks = mne.pick_channels(raw.info["ch_names"], ['O1', 'Oz' ,'O2'])
-    evoked_enc_base_left = epochs["Encoding Stimulus Onset Baseline Left"].average(picks)
-    evoked_enc_base_left.plot(titles="left")
-
-    ## Interesting: so, we definitely see a positive deflection centered at around 0.1 Hz, and then the signal plateus afterwards
-    evoked_enc_base_right = epochs["Encoding Stimulus Onset Baseline Right"].average(picks)
-    evoked_enc_base_right.plot();
-
-    # I guess it make sense to pool over targets and baseline stimuli and then check for left and right side separately 
-    evoked_enc_base_left = epochs["Encoding Stimulus Onset Baseline Left"].average().plot()
-    evoked_enc_base_right = epochs["Encoding Stimulus Onset Baseline Right"].average().plot()
-
-    # I don't understand why 
-    evoked_enc_dist_left = epochs['Encoding Stimulus Onset Distraction Left Target'].average().plot()
-
-    # now, we get a much flatter power spectrum
-    enc_pooled_left = epochs[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']].average().plot()
-
-    # Evoked estimates for retieval phase
-    evoked_ret_dist_left = epochs['Retrieval Stimulus Onset Distraction Left Target'].average().plot()
-    evoked_ret_base_left = epochs['Retrieval Stimulus Onset Baseline Left'].average().plot()
+if __name__ == "__main__":
+    preprocessing(sub=param1)
