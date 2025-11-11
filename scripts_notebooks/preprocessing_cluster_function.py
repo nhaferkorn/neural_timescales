@@ -19,9 +19,10 @@ from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_D
 # set system variables
 param1 = sys.argv[1]
 
+RUN_PLOT = False
 RUN_ICA = True
 RUN_EPOCHS = False
-RUN_EVOKED = True
+RUN_EVOKED = False
 
 
 def preprocessing(sub):
@@ -42,7 +43,12 @@ def preprocessing(sub):
     raw.set_montage("biosemi32", on_missing = "ignore")
 
     # filter the data
-    raw_filtered = raw.copy().filter(l_freq = 0.1, h_freq=45)
+    raw_filtered = raw.copy().filter(l_freq = 0.1, h_freq=40)
+
+    # set average reference: 
+    raw_ref = raw_filtered.copy().set_eeg_reference(ref_channels = 'average')
+
+
 
     # instantiate report object and specify output directory
     # report = mne.Report(title= f"Sub-{sub} Report")
@@ -54,29 +60,52 @@ def preprocessing(sub):
 
     # keys of all the events of interest
     keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
-         ,'Fixation Onset Enc', 'Cue Onset'}
+         ,'Fixation Onset Enc', 'Cue Onset', 
+         'Response Natural', 'Response Manmade', 'Response None Enc',
+        'Fixation Onset Enc', 'Cue Onset', 'Rest onset', 'Rest offset', 'End Encoding',
+        'Start Retrieval', 'Retrieval Stimulus Onset Baseline Left', 'Retrieval Stimulus Onset Baseline Right',
+        'Retrieval Stimulus Onset Distraction Left Target', 'Retrieval Stimulus Onset Distraction Right Target',
+        'Retrieval Stimulus Onset Distraction Right Distractor', 'Retrieval Stimulus Onset Distraction Left Distractor',
+        'Retrieval Stimulus Onset New', 'Response Old', 'Response New', 'Response None ON',
+        'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
+        'Fixation Onset Ret'}
+
+    # i guess i can also merge some of the events into a new events (e.g. for Responses in the Encoding Phase)
+
+
 
     events_of_interest = {k: EVENT_DICT[k] for k in keys}
 
     # report.add_events(events=events, title='Events Plot', sfreq = raw.info['sfreq'])
     # report.save(output_path, overwrite=True)
 
-    # save events plot in derivatives directory 
-    fig = mne.viz.plot_events(
-    events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest)
-    fig.suptitle(f"Events-{sub}", fontsize=14)
+    # find eog epochs
 
-    fig.savefig(os.path.join(DERIV_DIR, f'events_{sub}.png'))
+    # use block argument to get the plot to open on the cluster 
+    # raw_filtered.plot(block=True)
+
+    #  eog_epochs = mne.preprocessing.find_eog_events(raw_filtered, l_freq = 1.5, h_freq=10)
+    #  eog_epochs.plot()
+
+
+
+    if RUN_PLOT:
+    # save events plot in derivatives directory 
+        fig = mne.viz.plot_events(
+        events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest)
+        fig.suptitle(f"Events-{sub}", fontsize=14)
+
+        fig.savefig(os.path.join(DERIV_DIR, f'events_{sub}.png'))
 
 
     if RUN_ICA:
-            raw_ica_filtered = raw.copy().filter(l_freq = 1, h_freq=30)
+            raw_ica_filtered = raw_ref.copy().filter(l_freq = 1.5, h_freq=30)
             ica = mne.preprocessing.ICA(n_components=15, max_iter="auto", random_state=95)
             ica.fit(raw_ica_filtered)
 
             # plot components
             fig = ica.plot_components(title=f"ICs for {sub}")
-            fig.savefig(os.path.join(DERIV_DIR, "ICA",  f'{sub}_ics.png'))
+            fig.savefig(os.path.join(DERIV_DIR, "Fixed",  f'{sub}_ics_1.5_30.png'))
 
             # save subjects solution 
 
@@ -87,8 +116,7 @@ def preprocessing(sub):
     # else:
     #      raise FileNotFoundError
 
-    ## set average reference: 
-    # reconst_raw_ref = reconst_raw.copy().set_eeg_reference(ref_channels = 'average')
+
 
     # Epochs based on peak-to-peak channel amplitude 
     if RUN_EPOCHS: 
@@ -117,7 +145,7 @@ def preprocessing(sub):
         print(type(dropped_percent))
 
         # still need to fix that it doesn't overwrite
-        with open('drop_log_stats.txt', 'w') as file:
+        with open(os.path.join(DERIV_DIR, "Evokeds", 'drop_log_stats.txt', 'w')) as file:
                 file.write(f"{sub}: {dropped_percent}\n")
 
         # plot power spectra and save figure
@@ -152,19 +180,4 @@ def preprocessing(sub):
 
         # save the evoked plots 
         evoked_left.savefig(os.path.join(DERIV_DIR, f'evoked_enc_left_{sub}.png'))
-        evoked_right.savefig(os.path.join(DERIV_DIR, f'evoked_enc_right_{sub}.png'))
-        evoked_base.savefig(os.path.join(DERIV_DIR, f'evoked_enc_baseline_{sub}.png'))
-        evoked_dist.savefig(os.path.join(DERIV_DIR, f'evoked_enc_distraction_{sub}.png'))
-        evoked_cue.savefig(os.path.join(DERIV_DIR, f'evoked_enc_fixcue_{sub}.png'))
-
-
-        # pick occipital electrodes
-        # picks = mne.pick_channels(raw.info["ch_names"], ['O1', 'Oz' ,'O2'])
-
-        # evoked responses for retrieval phase
-        # evoked_ret_dist_left = epochs['Retrieval Stimulus Onset Distraction Left Target'].average().plot()
-        # evoked_ret_base_left = epochs['Retrieval Stimulus Onset Baseline Left'].average().plot()
-
-
-if __name__ == "__main__":
-    preprocessing(sub=param1)
+        evoked_right.savefig(os.path.join(DERIV_DIR, f'evoked_enc_right_{sub}
