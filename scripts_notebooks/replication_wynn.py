@@ -3,13 +3,21 @@
 import mne
 import numpy as np
 import os
+import sys
 
 import matplotlib.pyplot as plt
 
-from src.settings import DATA_DIR, BIDS_ROOT, EVENT_DICT
+sys.path.append('/project/4180000.57/neural_timescales/src')
+
+# import variables and paths
+from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_DIR
+
+RUN_EOGs = False
+RUN_ICA = False
+RUN_EPOCHS = False
 
 # either load the data again or import a saved epoched objects
-raw_file = os.path.join(DATA_DIR, "eeg", "103.bdf")
+raw_file = os.path.join(EEG_DIR, "103.bdf")
 
 # change this  per subject
 sub_id = "03"
@@ -19,17 +27,11 @@ raw = mne.io.read_raw_bdf(raw_file, preload=True, eog = ["EXG1", "EXG2", "EXG3",
 
 raw.set_montage("biosemi32", on_missing = "ignore") 
 
-
 events = mne.find_events(raw, stim_channel="Status", initial_event=False)
 
 # subtract marker offset value
 events[:,2] = events[:, 2] - 64512
 print(events)
-
-# set average reference (but only set after removing bad periods, because otherwise it will spread)
-# raw_avg_ref = raw_filtered.set_eeg_reference(ref_channels = "average")
-
-### Stimulus-locked epochs for encoding trials (-2000 to 2000 ms); why so long?
 
 # subsetting a dictionary based on key values
 keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
@@ -37,13 +39,35 @@ keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseli
 
 events_of_interest = {k: EVENT_DICT[k] for k in keys}
 
-# Create epochs; check tmin and tmax parameters!!!
-epochs = mne.Epochs(raw_filtered, events = events, event_id = events_of_interest, tmin=-1, tmax = 1, baseline=None)
+raw.plot_sensors(kind='topomap', ch_type='eeg', show_names=True)
+
+if RUN_EOGs:
+    #  heogl (horizontal EOG left): EXG1
+        #  heogr (horizontal EOG right): EXG2
+        #  veogt (vertical EOG; top): EXG3
+        #  veogb (vertical EOG; bottom): EXG4
+
+        # first subtract the two horizontal electrodes and the two vertical electrodes
+        # apparently you can use this function
+        raw_copy = raw.copy()
+        print(f'Before channel subtraction {raw_copy.info['ch_names']}')
+
+        # but I think this only adds a virtual new channel (not sure if it creates a new channel that you can call from the info object)
+        # and drop EXG3 and EXG4
+        mne.set_bipolar_reference(raw_copy, 'EXG3', 'EXG4', ch_name='VEOG')
+
+        # but then how is this added to the info object
+        # print(raw.info['ch_names']='VEOG')
 
 
-fig = mne.viz.plot_events(
-    events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest)
-fig.suptitle(f"Events {sub_id}", fontsize=14)
+        # maybe try: mne.add_reference_channels (but this adds reference channel to data that consists of all zeros)
+
+
+        print(f'After channel subtraction {raw_copy.info['ch_names']}')
+
+        raw_copy.plot()
+
+
 
 
 ################################################################################
@@ -91,114 +115,108 @@ fig.suptitle(f"Events {sub_id}", fontsize=14)
 
 
 ################################################################################
-## REJECTION BASED ON ICA
+## ICA
 
-raw_ica_filtered = raw.copy().filter(l_freq = 1.0, h_freq=40)
-print('this is raw_ica_filtered', raw_ica_filtered)
+if RUN_ICA:
 
-# not sure which method is best here, and how many components; you can also directly pass a reject dictionary!!
-ica = mne.preprocessing.ICA(n_components=15, method = "fastica", max_iter="auto", random_state=95)
+    raw_ica_filtered = raw.copy().filter(l_freq = 1.0, h_freq=40)
+    print('this is raw_ica_filtered', raw_ica_filtered)
 
-# effect of including reject:  Signal periods exceeding the thresholds in reject or less than the thresholds in flat will be removed before fitting the ICA
-# but how does it know how to set-up the epocj??
-ica.fit(raw_ica_filtered)  # reject = rejection_criteria_ica
-ica
+    # not sure which method is best here, and how many components; you can also directly pass a reject dictionary!!
+    ica = mne.preprocessing.ICA(n_components=15, method = "fastica", max_iter="auto", random_state=95)
 
-# plot components
-ica.plot_components(title=f"ICs for {sub_id}")
+    # effect of including reject:  Signal periods exceeding the thresholds in reject or less than the thresholds in flat will be removed before fitting the ICA
+    # but how does it know how to set-up the epocj??
+    ica.fit(raw_ica_filtered)  # reject = rejection_criteria_ica
+    ica
 
-
-# find which ICs match the EOG pattern: this doesn't work!!
-# eog_indices, eog_scores = ica.find_bads_eog(raw_filtered)
-
-# select manually which component to exclude; not sure if this type of indexing actually works
-ica.exclude = [1]
-
-# # ica.apply() changes the Raw object in-place, so let's make a copy first:
-reconst_raw = raw_filtered.copy()
-ica.apply(reconst_raw)
-
-# plot the signal with blinks removed
-reconst_raw.plot()
-# use dedicated EOG channels as a "pattern" to check the ICs against, and automatically mark for exclusion any ICs that match EOG/ECG pattern
-
-# this makes sense!!
-raw_filtered.load_data()
-ica.plot_sources(raw_filtered, show_scrollbars=False)
-
-# after fitting ica - apply amplitude rejection criteria
-reject_criteria = dict(eeg=100e-6,eog = 200e-6)
+    # plot components
+    ica.plot_components(title=f"ICs for {sub_id}")
 
 
-# set average reference: 
-reconst_raw_ref = reconst_raw.copy().set_eeg_reference(ref_channels = 'average')
+    # find which ICs match the EOG pattern: this doesn't work!!
+    # eog_indices, eog_scores = ica.find_bads_eog(raw_filtered)
 
-epochs_after_rejection = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin = -0.7, tmax=0.5, baseline=None, reject = reject_criteria)
+    # select manually which component to exclude; not sure if this type of indexing actually works
+    ica.exclude = [1]
 
-# plot how many epochs were dropped 
-epochs_after_rejection.drop_bad()
+    # # ica.apply() changes the Raw object in-place, so let's make a copy first:
+    reconst_raw = raw_filtered.copy()
+    ica.apply(reconst_raw)
 
-# plot epochs: 
-# inspections shows that there is still quite a number of epochs that contain blinks
-epochs_after_rejection.plot()
+    # plot the signal with blinks removed
+    reconst_raw.plot()
+    # use dedicated EOG channels as a "pattern" to check the ICs against, and automatically mark for exclusion any ICs that match EOG/ECG pattern
+
+    # this makes sense!!
+    raw_filtered.load_data()
+    ica.plot_sources(raw_filtered, show_scrollbars=False)
+
+    # # after fitting ica - apply amplitude rejection criteria
+    # reject_criteria = dict(eeg=100e-6,eog = 200e-6)
 
 
-fig = epochs_after_rejection.plot_drop_log(show=False)
-fig.suptitle(f"{sub_id} - ICA and Amplitude Reject (100, 200)", fontsize=14)
-plt.show()
+    # # set average reference: 
+    # reconst_raw_ref = reconst_raw.copy().set_eeg_reference(ref_channels = 'average')
+
+    # epochs_after_rejection = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin = -0.7, tmax=0.5, baseline=None, reject = reject_criteria)
+
+    # # plot how many epochs were dropped 
+    # epochs_after_rejection.drop_bad()
+
+    # # plot epochs: 
+    # # inspections shows that there is still quite a number of epochs that contain blinks
+    # epochs_after_rejection.plot()
+
+    # fig = epochs_after_rejection.plot_drop_log(show=False)
+    # fig.suptitle(f"{sub_id} - ICA and Amplitude Reject (100, 200)", fontsize=14)
+    # plt.show()
 
 
 #################################################################################
 ## POWER ESTIMATES (after ICA & Amplitude Rejection) POOLED OVER DISTRACTION
 
-# power_left.plot_joint(baseline=(-0.3, 0), mode="mean", title = 'sub-02 TF Power left, 100 EEG, 200 EOG')
+if RUN_EPOCHS:
 
-# epochs_left_after_rejection.compute_psd(fmin=2.0, fmax=30).plot()
-# epochs_right_after_rejection.compute_psd(fmin=2.0, fmax=30).plot()
+    epochs_after_rejection = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=None, reject = reject_criteria, preload=True)
 
-# # butterfly plots
-# epochs_left_after_rejection.average().plot(titles = 'Sub-03 Epochs left, 100 EEG, 200 EOG')
-# epochs_right_after_rejection.average().plot(titles = 'Sub-03 Epochs right, 100 EEG, 200 EOG')
+    epochs_left_after_rejection = epochs_after_rejection[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
+    epochs_right_after_rejection = epochs_after_rejection[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
+    epochs_cue_onset_after_rejection = epochs_after_rejection['Cue Onset']
 
-epochs_after_rejection = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=None, reject = reject_criteria, preload=True)
+    ## This is interesting: I guess the small peak in voltage centered around -600ms pre-stimulus represent the (visual) processing of the cue stimulus.
 
-epochs_left_after_rejection = epochs_after_rejection[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
-epochs_right_after_rejection = epochs_after_rejection[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
-epochs_cue_onset_after_rejection = epochs_after_rejection['Cue Onset']
+    ## Compute TF power: 
+    freqs = np.arange(2,30,2)
 
-## This is interesting: I guess the small peak in voltage centered around -600ms pre-stimulus represent the (visual) processing of the cue stimulus.
+    n_cycles = freqs / 2
+    power_left = epochs_left_after_rejection.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+    power_right = epochs_right_after_rejection.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+    power_cue = epochs_cue_onset_after_rejection.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
 
-## Compute TF power: 
-freqs = np.arange(2,30,2)
-
-n_cycles = freqs / 2
-power_left = epochs_left_after_rejection.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-power_right = epochs_right_after_rejection.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-power_cue = epochs_cue_onset_after_rejection.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-
-## and I am not sure of this makes sense - because the baseline correction that I am using still contains activity from the cue...
-# %matplotlib qt
-# Double check this
-power_left.plot_joint(baseline=(-0.3, 0), mode="mean", tmin=-0.2, tmax=1, timefreqs=((0.1, 8), (.3, 8)))
-power_left.plot_joint(baseline=(-0.3, 0))
+    ## and I am not sure of this makes sense - because the baseline correction that I am using still contains activity from the cue...
+    # %matplotlib qt
+    # Double check this
+    power_left.plot_joint(baseline=(-0.3, 0), mode="mean", tmin=-0.2, tmax=1, timefreqs=((0.1, 8), (.3, 8)))
+    power_left.plot_joint(baseline=(-0.3, 0))
 
 
-power_left.plot_topo(baseline=(-0.3, 0), mode="mean", title=f"{sub_id} Average Power - Left Enc Stimuli (after ICA)")
-power_right.plot_topo(baseline=(-0.3, 0), title=f"{sub_id} Average Power - Right Enc Stimuli (after ICA)") # this looks extremely weird & cannot be right
+    power_left.plot_topo(baseline=(-0.3, 0), mode="mean", title=f"{sub_id} Average Power - Left Enc Stimuli (after ICA)")
+    power_right.plot_topo(baseline=(-0.3, 0), title=f"{sub_id} Average Power - Right Enc Stimuli (after ICA)") # this looks extremely weird & cannot be right
 
-power_cue.plot_topo(baseline=(-0.3, 0), title=f"{sub_id} Average Power - Cue Onset (after ICA)") # this looks extremely weird & cannot be right
+    power_cue.plot_topo(baseline=(-0.3, 0), title=f"{sub_id} Average Power - Cue Onset (after ICA)") # this looks extremely weird & cannot be right
 
 
-## Plot Evokeds for all channels
-# %matplotlib inline
-evoked_left = epochs_left_after_rejection.average().plot(titles=f"{sub_id} Evoked - Left Attend", picks = 'eeg')
-evoked_right = epochs_right_after_rejection.average().plot(titles=f"{sub_id} Evoked - Right Attend", picks = 'eeg')
-evoked_cue = epochs_cue_onset_after_rejection.average().plot(titles=f"{sub_id} Evoked - Cue", picks = 'eeg')
+    ## Plot Evokeds for all channels
+    # %matplotlib inline
+    evoked_left = epochs_left_after_rejection.average().plot(titles=f"{sub_id} Evoked - Left Attend", picks = 'eeg')
+    evoked_right = epochs_right_after_rejection.average().plot(titles=f"{sub_id} Evoked - Right Attend", picks = 'eeg')
+    evoked_cue = epochs_cue_onset_after_rejection.average().plot(titles=f"{sub_id} Evoked - Cue", picks = 'eeg')
 
 
 
-times = np.linspace(0.05, 0.13, 5)
-epochs_left_after_rejection.average().plot_topomap(times=times, colorbar=True)
+    times = np.linspace(0.05, 0.13, 5)
+    epochs_left_after_rejection.average().plot_topomap(times=times, colorbar=True)
 #############################################################################################################
 ## POWER MODULATION INDEX
 
@@ -218,74 +236,74 @@ epochs_left_after_rejection.average().plot_topomap(times=times, colorbar=True)
 #####################################################################################################################
 ## LOOK AT 'Fixation Onset Enc' EPOCHS (DATA QUALITY)
 
-# also spefify amplitude rejection criteria
-rejection_criteria = dict(eeg=100e-6,eog = 200e-6)
+# # also spefify amplitude rejection criteria
+# rejection_criteria = dict(eeg=100e-6,eog = 200e-6)
 
 
-# epoch such that I only extract the resting state periods
-epochs = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin=-0.2, tmax = 1.2, baseline=None, reject = rejection_criteria, preload = True)
+# # epoch such that I only extract the resting state periods
+# epochs = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin=-0.2, tmax = 1.2, baseline=None, reject = rejection_criteria, preload = True)
 
-# subselect only fixation periods
-epochs_resting = epochs['Fixation Onset Enc']
+# # subselect only fixation periods
+# epochs_resting = epochs['Fixation Onset Enc']
 
-# plot those epochs
-epochs_resting.plot()
-
-
-# plot evoked objects
-epochs_resting.average().plot(titles = "Sub-03 - Fixation Period Activity, 150, 200")
+# # plot those epochs
+# epochs_resting.plot()
 
 
-################################################################################################
-## REPLICATION WYNN on cleaned data
-
-keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
-         ,'Fixation Onset Enc', 'Cue Onset'}
-events_of_interest = {k: EVENT_DICT[k] for k in keys}
-
-# amplitude rejection criteria
-rejection_criteria = dict(eeg=100e-6,eog = 200e-6)
+# # plot evoked objects
+# epochs_resting.average().plot(titles = "Sub-03 - Fixation Period Activity, 150, 200")
 
 
-# print reconst_raw_ref object and info
-print(reconst_raw_ref)
+# ################################################################################################
+# ## REPLICATION WYNN on cleaned data
+
+# keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
+#          ,'Fixation Onset Enc', 'Cue Onset'}
+# events_of_interest = {k: EVENT_DICT[k] for k in keys}
+
+# # amplitude rejection criteria
+# rejection_criteria = dict(eeg=100e-6,eog = 200e-6)
 
 
-# extract -2000ms - 2000ms epochs
-epochs_wynn = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin=-2, tmax = 2, baseline=None, reject = rejection_criteria, preload = True)
+# # print reconst_raw_ref object and info
+# print(reconst_raw_ref)
+
+
+# # extract -2000ms - 2000ms epochs
+# epochs_wynn = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin=-2, tmax = 2, baseline=None, reject = rejection_criteria, preload = True)
 
 
 
-epochs_wynn_attend_left = epochs_wynn[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
+# epochs_wynn_attend_left = epochs_wynn[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
 
-epochs_wynn_attend_right = epochs_wynn[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
-
-
-freqs = np.arange(2,30,2)
-
-n_cycles = freqs / 2
-
-## Compute PSD average
-psd_wynn_left = epochs_wynn_attend_left.compute_psd(method='multitaper', tmin = -0.75, tmax = 0.75)
-psd_wynn_right = epochs_wynn_attend_left.compute_psd(method = 'multitaper', tmin = -0.75, tmax = 0.75)
+# epochs_wynn_attend_right = epochs_wynn[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
 
 
-## Compute TRF
-power_tf_wynn_left = epochs_wynn_attend_left.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-power_tf_wynn_right = epochs_wynn_attend_left.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+# freqs = np.arange(2,30,2)
+
+# n_cycles = freqs / 2
+
+# ## Compute PSD average
+# psd_wynn_left = epochs_wynn_attend_left.compute_psd(method='multitaper', tmin = -0.75, tmax = 0.75)
+# psd_wynn_right = epochs_wynn_attend_left.compute_psd(method = 'multitaper', tmin = -0.75, tmax = 0.75)
 
 
-## Plot PDS and TRF
-psd_wynn_left.plot()
-
-# I need to specify channels for this!!
-power_tf_wynn_left.plot()
-
-## how can I pool an average trf object over channels - doesn't exist, but check shape
-## What does it mean that AverageTRF object is not subscriptable; then how can I index the power of a single channel??
+# ## Compute TRF
+# power_tf_wynn_left = epochs_wynn_attend_left.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+# power_tf_wynn_right = epochs_wynn_attend_left.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
 
 
-### Grand Averages - mne.grand_averages()
-### make grand average of a list of Evoked, Average TRF or Spectrum data
+# ## Plot PDS and TRF
+# psd_wynn_left.plot()
 
-## use for mean of all subjects or runs
+# # I need to specify channels for this!!
+# power_tf_wynn_left.plot()
+
+# ## how can I pool an average trf object over channels - doesn't exist, but check shape
+# ## What does it mean that AverageTRF object is not subscriptable; then how can I index the power of a single channel??
+
+
+# ### Grand Averages - mne.grand_averages()
+# ### make grand average of a list of Evoked, Average TRF or Spectrum data
+
+# ## use for mean of all subjects or runs
