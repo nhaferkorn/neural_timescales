@@ -7,5 +7,4 @@ my_script=$PWD/preprocessing_cluster_function.py
 for subj in $(<subjectlist.txt); do # in Verzeichnis setzen lassen, und parameter: all oder einzelnd/liste
   echo "RUN sbatch $PWD/slurm_preprocessing.sh $my_script $subj" 
   sbatch $PWD/slurm_preprocessing.sh $my_script $subj 
-  sleep 1
 done
