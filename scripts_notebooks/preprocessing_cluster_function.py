@@ -7,7 +7,6 @@ import mne
 import glob
 import re
 
-# think about how this translates to the cluster
 sys.path.append('/project/4180000.57/neural_timescales/src')
 
 # import variables and paths
@@ -19,7 +18,10 @@ from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_D
 # set system variables
 param1 = sys.argv[1]
 
-RUN_PLOT = False
+# Toggle ON or OFF
+RUN_PLOT_EVENTS = False
+RUN_ANNOTATIONS = False
+FIND_EOGs = True
 RUN_ICA = True
 RUN_EPOCHS = False
 RUN_EVOKED = False
@@ -30,29 +32,35 @@ def preprocessing(sub):
     # Print subject label and running
     print('\nCURRENTLY RUNNING SUBJECT: ', sub, '\n')
 
-    # not sure if this works - do I need even need glob.glob in that case?
     rawfile = os.path.join(EEG_DIR, "%s.bdf") % sub
 
     print(rawfile)
 
-    raw = mne.io.read_raw_bdf(rawfile, preload=True, eog = ["EXG1", "EXG2", "EXG3", "EXG4"], misc = ["EXG5", "EXG6", "EXG7", "EXG8"], stim_channel="STATUS")
+    raw = mne.io.read_raw_bdf(rawfile, preload=True, eog = ["EXG1", "EXG2", "EXG3", "EXG4"], misc = ["EXG5", "EXG6", "EXG7", "EXG8"], stim_channel="STATUS", infer_types=True)
     
     raw = raw.drop_channels(ch_names = ["EXG7", "EXG8"])
 
+    #  create VEOG and HEOG channels
+    #  heogl (horizontal EOG left): EXG1
+    #  heogr (horizontal EOG right): EXG2
+    #  veogt (vertical EOG; top): EXG3
+    #  veogb (vertical EOG; bottom): EXG4
+
+    raw = mne.set_bipolar_reference(raw, 'EXG3', 'EXG4', ch_name='VEOG')
+    raw = mne.set_bipolar_reference(raw, 'EXG1', 'EXG2', ch_name='HEOG')
+
+    # notch filter the data to remove 50Hz noise
+    # mne.filter.notch_filter
+    raw.info['line_freq'] = 50.
+
     # set montage directly on raw object (and not a copy of it!) > this creates a new entry in info object
     raw.set_montage("biosemi32", on_missing = "ignore")
-
-    # filter the data
-    raw_filtered = raw.copy().filter(l_freq = 0.1, h_freq=40)
-
+    
     # set average reference: 
-    raw_ref = raw_filtered.copy().set_eeg_reference(ref_channels = 'average')
+    raw_ref = raw.copy().set_eeg_reference(ref_channels = 'average')
 
-
-
-    # instantiate report object and specify output directory
-    # report = mne.Report(title= f"Sub-{sub} Report")
-    # output_path = os.path.join(REPORT_DIR, f"subject{sub}_report.html")
+    # filter the data (choose same filter settings as orig paper)
+    raw_ref = raw_ref.copy().filter(l_freq = 0.5, h_freq=30)
     
     # find events
     events = mne.find_events(raw, stim_channel = "Status", initial_event=False)
@@ -70,51 +78,74 @@ def preprocessing(sub):
         'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
         'Fixation Onset Ret'}
 
-    # i guess i can also merge some of the events into a new events (e.g. for Responses in the Encoding Phase)
-
-
 
     events_of_interest = {k: EVENT_DICT[k] for k in keys}
 
-    # report.add_events(events=events, title='Events Plot', sfreq = raw.info['sfreq'])
-    # report.save(output_path, overwrite=True)
-
-    # find eog epochs
-
-    # use block argument to get the plot to open on the cluster 
-    # raw_filtered.plot(block=True)
-
-    #  eog_epochs = mne.preprocessing.find_eog_events(raw_filtered, l_freq = 1.5, h_freq=10)
-    #  eog_epochs.plot()
-
-
-
-    if RUN_PLOT:
-    # save events plot in derivatives directory 
+    if RUN_PLOT_EVENTS:      
         fig = mne.viz.plot_events(
         events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest)
         fig.suptitle(f"Events-{sub}", fontsize=14)
 
         fig.savefig(os.path.join(DERIV_DIR, f'events_{sub}.png'))
 
+    if RUN_ANNOTATIONS:
+         
+        # check if annotations.fif file already exists
+        if os.path.exists(os.path.join(DERIV_DIR, "Raw_Annotations", f"{sub}-annotations.fif")):
+            print(f"ANNOTATION FILE FOR SUB-{sub} ALREADY EXISTS\n")
+            print(" READING ANNOTATIONS FROM .FIF FILE")
+            annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "Raw_Annotations", f"{sub}-annotations.fif"))
+            print(annot_from_file)
+
+            # now, if we want to set new annotations in interactive plot mode
+            raw_ref.set_annotations(annot_from_file, emit_warning=False)
+            raw_ref.plot(block=True)
+
+            print("SAVING NEWLY ADDED ANNOTATIONS TO FILE")
+            raw_ref.annotations.save(os.path.join(DERIV_DIR, "Raw_Annotations", f"{sub}-annotations.fif"), overwrite=True)
+        
+        else:
+            print(f"ANNOTATION FILE FOR SUB-{sub} DOESN'T EXIST\n")
+            # load raw lot to create annotations and save them
+            raw_ref.plot(block=True)
+            # save initially created annotations to file
+            raw_ref.annotations.save(os.path.join(DERIV_DIR, "Raw_Annotations", f"{sub}-annotations.fif"), overwrite=True)
+
+
+    if FIND_EOGs: 
+        # load saved annotations 
+        annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "Raw_Annotations", f"{sub}-annotations.fif"))
+
+        # # set annotations
+        raw_ref.set_annotations(annot_from_file)
+
+        # # double check that they are really added to raw_ref object - seems like they are
+        print("SANITY CHECK: ANNOTATIONS ARE SET:",  raw_ref.annotations)
+
+        # pass reject_by_annotation parameter (but I don't think that they are recognized) - maybe I need to set them more explicitly
+        eog_epochs = mne.preprocessing.create_eog_epochs(raw_ref.filter(1, 10), reject_by_annotation = True)
+        eog_plot = eog_epochs.average().plot_joint(title= f"AFTER: EOG Epochs Plot - Sub-{sub}")
+        eog_plot.savefig(os.path.join(DERIV_DIR, 'Fixed', 'After', 'EOG_epochs', f'{sub}_eog_epochs_bad_rejected_onlyend.png'))
+
+
 
     if RUN_ICA:
-            raw_ica_filtered = raw_ref.copy().filter(l_freq = 1.5, h_freq=30)
+            print(raw_ref.info)
+            raw_ica_filtered = raw_ref.copy().filter(l_freq = 1., h_freq=30)
             ica = mne.preprocessing.ICA(n_components=15, max_iter="auto", random_state=95)
-            ica.fit(raw_ica_filtered)
+            ica.fit(raw_ica_filtered, reject_by_annotation=True)
 
             # plot components
-            fig = ica.plot_components(title=f"ICs for {sub}")
-            fig.savefig(os.path.join(DERIV_DIR, "Fixed",  f'{sub}_ics_1.5_30.png'))
+            fig = ica.plot_components(title=f"AFTER: ICs for Sub-{sub}")
+            fig.savefig(os.path.join(DERIV_DIR, "Fixed", 'After', 'ICA_results', f'{sub}_avgref_filt_1_30_onlyend.png'))
 
             # save subjects solution 
 
-
-    # Implement check-point: only move on if raw_ica exist!! - this doesn't work straight away
-    # if raw_ica: # not sure if this works...
-    #      print('Blink Rejection Completed')
-    # else:
-    #      raise FileNotFoundError
+            # Implement check-point: only move on if raw_ica exist!! - this doesn't work straight away
+            # if raw_ica: # not sure if this works...
+            #      print('Blink Rejection Completed')
+            # else:
+            #      raise FileNotFoundError
 
 
 
@@ -129,13 +160,17 @@ def preprocessing(sub):
         ) 
         flat_criteria = dict(eeg=1e-6)  # 1 µV
 
-        epochs = mne.Epochs(raw_filtered, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None, reject = reject_criteria, flat = flat_criteria)
+        # maybe also try rejection without Fp1 and Fp2 electrodes 
+
+        epochs = mne.Epochs(raw_ref, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=(-0.5, 0), reject = reject_criteria, flat = flat_criteria)
         
 
         # plot how many epochs were dropped 
         epochs_after_rejection = epochs.drop_bad()
 
-        # epochs_after_rejection.plot_droplog()
+        plot_dropped =  epochs_after_rejection.plot_drop_log()
+        plot_dropped.savefig(os.path.join(DERIV_DIR, 'Fixed', 'Dropped_veog_eog_300_microvolt', f'{sub}_drop_log_eeo_veog_heog_reject_shorter_epochs.png'))
+
 
         # compute the channel stats based on a drop_log from epochs (returns total percentage of epochs dropped)
         dropped_percent = epochs_after_rejection.drop_log_stats()
@@ -144,17 +179,19 @@ def preprocessing(sub):
         print(dropped_percent)
         print(type(dropped_percent))
 
-        # still need to fix that it doesn't overwrite
-        with open(os.path.join(DERIV_DIR, "Evokeds", 'drop_log_stats.txt', 'w')) as file:
-                file.write(f"{sub}: {dropped_percent}\n")
+        # # still need to fix that it doesn't overwrite
+        # with open(os.path.join(DERIV_DIR, "Evokeds", 'drop_log_stats_only_eog_reject.txt', 'w')) as file:
+        #         file.write(f"{sub}: {dropped_percent}\n")
 
         # plot power spectra and save figure
-        psd = epochs_after_rejection.compute_psd().plot(picks="eeg")
-        psd.savefig(os.path.join(DERIV_DIR, f'{sub}_psd.png'))
+        # psd = epochs_after_rejection.compute_psd().plot(picks="eeg")
+        # psd.savefig(os.path.join(DERIV_DIR, f'{sub}_psd.png'))
 
         # # save this figure of how many epochs were dropped to subject report
         # report.add_epochs(epochs=epochs, title='Epochs Object')
         # report.save(output_path, overwrite=True)
+
+        # plot the dropped epochs
 
 
     ## EVOKED RESPONSES 
@@ -180,4 +217,20 @@ def preprocessing(sub):
 
         # save the evoked plots 
         evoked_left.savefig(os.path.join(DERIV_DIR, f'evoked_enc_left_{sub}.png'))
-        evoked_right.savefig(os.path.join(DERIV_DIR, f'evoked_enc_right_{sub}
+        evoked_right.savefig(os.path.join(DERIV_DIR, f'evoked_enc_right_{sub}.png'))
+        evoked_base.savefig(os.path.join(DERIV_DIR, f'evoked_enc_baseline_{sub}.png'))
+        evoked_dist.savefig(os.path.join(DERIV_DIR, f'evoked_enc_distraction_{sub}.png'))
+        evoked_cue.savefig(os.path.join(DERIV_DIR, f'evoked_enc_fixcue_{sub}.png'))
+
+        # evokeds = dict(low_dist=l_aud, high_dist=l_vis)
+        # fig_evoked_compared mne.viz.plot_compare_evokeds(evokeds,  combine="mean")
+        # fig_evoked_compared.savefig()
+
+
+        # evoked responses for retrieval phase
+        # evoked_ret_dist_left = epochs['Retrieval Stimulus Onset Distraction Left Target'].average().plot()
+        # evoked_ret_base_left = epochs['Retrieval Stimulus Onset Baseline Left'].average().plot()
+
+
+if __name__ == "__main__":
+    preprocessing(sub=param1)
