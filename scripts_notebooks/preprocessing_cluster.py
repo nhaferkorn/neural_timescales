@@ -14,7 +14,7 @@ from src.settings import DATA_DIR, BIDS_ROOT, EVENT_DICT, EVENT_DICT_CLEAN, REPO
 
 # def main():
 
-## SETUP
+## SETUP 
 
 RUN_ICA = True
 RUN_EPOCHS = False
