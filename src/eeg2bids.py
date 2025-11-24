@@ -2,17 +2,18 @@
 
 import os
 import glob
-
 import re
+import sys
 
 import mne
 
 from mne_bids import BIDSPath, print_dir_tree, write_raw_bids
 
-from src.settings import ROOT_DIR, DATA_DIR, EEG_DIR, BIDS_ROOT, TASK, EVENT_DICT
+sys.path.append('/project/4180000.57/neural_timescales/src')
+from settings import DATA_DIR, EEG_DIR, BIDS_ROOT, TASK, EVENT_DICT
 
 def data2bids():
-    """Provide docstring for data2bids function!
+    """Adapt this to run on cluster
     """
     # check if eeg and behavioral subdirectories exist in data_dir
     for file in os.scandir(DATA_DIR):
@@ -25,18 +26,18 @@ def data2bids():
         print("Creating EEG directory")
         os.mkdir(EEG_DIR)
 
-# initialize empty lists
+    # initialize empty lists
     raws = list()
     events = list()
     subject_ids = list()
 
-    for (root, dirs, files)  in os.walk(EEG_DIR):
+    for (root, dirs, files) in os.walk(EEG_DIR):
         print(files)
         for file in files:
             if file.endswith('.bdf'):
                 file_path = os.path.join(root, file)
                 print(f"Loading: {file_path}")
-                raw = mne.io.read_raw_bdf(file_path, preload=False) # make sure to include overwrite checkpoint
+                raw = mne.io.read_raw_bdf(file_path, preload=False) 
                 raws.append(raw)
 
                 # obtain events 
@@ -45,13 +46,13 @@ def data2bids():
                 events.append(event)
 
                 # obtain subject ID
-                subject_id = file.split('.')[0]
-                print(subject_id)
-                subject_ids.append(subject_id)
+                # subject_id = file.split('.')[0]
+                # print(subject_id)
+                # subject_ids.append(subject_id)
 
-    print(raws)
-    print(events)
-    print(subject_ids)
+    # print(raws)
+    # print(events)
+    # print(subject_ids)
 
     # set up
     if os.path.exists(BIDS_ROOT):
