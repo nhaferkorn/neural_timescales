@@ -68,8 +68,6 @@ if RUN_EOGs:
         raw_copy.plot()
 
 
-
-
 ################################################################################
 ## REJECTION BASED ON AMPLITUDE - COMPARE THE EFFECT OF MULTIPLE REJECTION PARAMETERS
 
@@ -152,25 +150,6 @@ if RUN_ICA:
     raw_filtered.load_data()
     ica.plot_sources(raw_filtered, show_scrollbars=False)
 
-    # # after fitting ica - apply amplitude rejection criteria
-    # reject_criteria = dict(eeg=100e-6,eog = 200e-6)
-
-
-    # # set average reference: 
-    # reconst_raw_ref = reconst_raw.copy().set_eeg_reference(ref_channels = 'average')
-
-    # epochs_after_rejection = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin = -0.7, tmax=0.5, baseline=None, reject = reject_criteria)
-
-    # # plot how many epochs were dropped 
-    # epochs_after_rejection.drop_bad()
-
-    # # plot epochs: 
-    # # inspections shows that there is still quite a number of epochs that contain blinks
-    # epochs_after_rejection.plot()
-
-    # fig = epochs_after_rejection.plot_drop_log(show=False)
-    # fig.suptitle(f"{sub_id} - ICA and Amplitude Reject (100, 200)", fontsize=14)
-    # plt.show()
 
 
 #################################################################################
@@ -212,8 +191,6 @@ if RUN_EPOCHS:
     evoked_left = epochs_left_after_rejection.average().plot(titles=f"{sub_id} Evoked - Left Attend", picks = 'eeg')
     evoked_right = epochs_right_after_rejection.average().plot(titles=f"{sub_id} Evoked - Right Attend", picks = 'eeg')
     evoked_cue = epochs_cue_onset_after_rejection.average().plot(titles=f"{sub_id} Evoked - Cue", picks = 'eeg')
-
-
 
     times = np.linspace(0.05, 0.13, 5)
     epochs_left_after_rejection.average().plot_topomap(times=times, colorbar=True)
@@ -271,8 +248,6 @@ if RUN_EPOCHS:
 
 # # extract -2000ms - 2000ms epochs
 # epochs_wynn = mne.Epochs(reconst_raw_ref, events = events, event_id = events_of_interest, tmin=-2, tmax = 2, baseline=None, reject = rejection_criteria, preload = True)
-
-
 
 # epochs_wynn_attend_left = epochs_wynn[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
 

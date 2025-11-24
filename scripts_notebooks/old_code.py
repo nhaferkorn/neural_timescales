@@ -21,7 +21,7 @@
 
 # print(raws)
 
-# %% Regression approach: Identification of Blinks and Ocular artifacts
+# Regression approach: Identification of Blinks and Ocular artifacts
 
 # epoch the data - wow, this looks truly horrible!! (not sure what I am doing here!!)
 
@@ -38,6 +38,7 @@
 
 
 ### Old EEG BIDS conversion script:
+
 """Converts EDF data to BIDS format."""
 
 import mne
@@ -147,7 +148,6 @@ if __name__  == "__main__":
     # })
 
 
-
 #  Power line noise
 fig = raw.compute_psd(tmax=np.inf, fmax=250).plot(
     average=True, amplitude=False, picks="data", exclude="bads"
@@ -156,3 +156,39 @@ fig = raw.compute_psd(tmax=np.inf, fmax=250).plot(
 #  Compute TFRs and calculate the difference between alpha power for attending left vs. attending right trials;
 # so I guess that's pooled over baseline & distraction (not sure if that actually makes sense)
 
+"""This script annotates raw EEG data.
+"""
+
+# mark end of encoding block and start of retrieval block 
+mapping_blocks = {13:"End Encoding" , 50:"Start Retrieval", 93:"End Retrieval"}
+annot_from_events = mne.annotations_from_events(events, event_desc = mapping_blocks, sfreq = raw_filtered.info["sfreq"], orig_time=raw.info["meas_date"],)
+raw_filtered.set_annotations(annot_from_events)
+
+print(raw_filtered.annotations.onset)
+
+#  Annotate blocks
+onsets_blocks = [raw_filtered.first_time, raw_filtered.annotations.onset[1]]
+durations_blocks = [raw_filtered.annotations.onset[0], raw_filtered.annotations.onset[2]]
+descriptions_blocks = ["encoding block", "retrieval block"]
+
+# okay so this works now!
+block_annots = mne.Annotations(
+    onset=onsets_blocks,
+    duration=durations_blocks,
+    description=descriptions_blocks,
+    orig_time=raw_filtered.info["meas_date"],
+)
+
+# Annotate break between encoding & retrieval phase
+onset_break = raw_filtered.annotations.onset[0]
+duration_break = raw_filtered.annotations.onset[1] - raw_filtered.annotations.onset[0]
+description_break = "BAD Break"
+
+break_annots = mne.Annotations(
+    onset=onset_break,
+    duration=duration_break,
+    description=description_break,
+    orig_time=raw_filtered.info["meas_date"],
+)
+
+raw_filtered.set_annotations(annot_from_events + break_annots)
