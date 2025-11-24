@@ -22,28 +22,25 @@ param1 = sys.argv[1]
 
 # Toggle ON or OFF - To BE FIXED: they depend on one another if I dont save and load intermediate results
 RUN_PLOT_EVENTS = False
-RUN_ANNOTATIONS = False
+RUN_ANNOTATIONS = True
 FIND_EOGs = False
-RUN_ICA = False # this just computes and plots the components
-APPLY_ICA = False # here you are either asked to indicate which 
-RUN_EPOCHS = True
-RUN_EVOKED = False
-RUN_FOOOF = True
+RUN_ICA = True # you only need to run this once per subject, because it then saves the ica solution
+APPLY_ICA = True 
+RUN_EPOCHS = False
+
 
 def preprocessing(sub):
 
-    # Print subject label and running
+    # Print subject label 
     print('\nCURRENTLY RUNNING SUBJECT: ', sub, '\n')
 
     rawfile = os.path.join(EEG_DIR, "%s.bdf") % sub
-
-    print(rawfile)
 
     raw = mne.io.read_raw_bdf(rawfile, preload=True, eog = ["EXG1", "EXG2", "EXG3", "EXG4"], misc = ["EXG5", "EXG6", "EXG7", "EXG8"], stim_channel="STATUS", infer_types=True)
     
     raw = raw.drop_channels(ch_names = ["EXG7", "EXG8"])
 
-    #  create VEOG and HEOG channels
+    # create VEOG and HEOG channels
     raw = mne.set_bipolar_reference(raw, 'EXG3', 'EXG4', ch_name='VEOG')
     raw = mne.set_bipolar_reference(raw, 'EXG1', 'EXG2', ch_name='HEOG')
 
@@ -111,7 +108,7 @@ def preprocessing(sub):
         print(f"Onset Practice Trial 1", annotations_mapping_blocks[0]["onset"])
         print(f"End Retrieval", annotations_mapping_blocks[2]["onset"])
 
-        print("NOW CREATING THE CROPPED SIGNAL")
+        print("\nNOW CREATING THE CROPPED SIGNAL\n")
         raw_crop = raw_ref.copy().crop(tmin = annotations_mapping_blocks[0]["onset"], tmax = annotations_mapping_blocks[2]["onset"])
 
 
@@ -162,8 +159,8 @@ def preprocessing(sub):
         ## Annotate bad spans of data
         # check if annotations.fif file already exists 
         if os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif")):
-            print(f"ANNOTATION FILE FOR SUB-{sub} ALREADY EXISTS\n")
-            print(" READING ANNOTATIONS FROM .FIF FILE")
+            print(f"\nANNOTATION FILE FOR SUB-{sub} ALREADY EXISTS\n")
+            print("\nREADING ANNOTATIONS FROM .FIF FILE")
             annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
             print(annot_from_file)
 
@@ -171,11 +168,11 @@ def preprocessing(sub):
             raw_crop.set_annotations(annot_from_file, emit_warning=False)
             raw_crop.plot(block=True)
 
-            print("SAVING NEWLY ADDED ANNOTATIONS TO FILE")
+            print("\nSAVING NEWLY ADDED ANNOTATIONS TO FILE \n")
             raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"), overwrite=True)
         
         else:
-            print(f"ANNOTATION FILE FOR SUB-{sub} DOESN'T EXIST\n")
+            print(f"\nANNOTATION FILE FOR SUB-{sub} DOESN'T EXIST\n")
             # load raw lot to create annotations and save them
             raw_crop.plot(block=True)
             # save initially created annotations to file
@@ -213,27 +210,24 @@ def preprocessing(sub):
 
 
     if RUN_ICA:
-        # annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
-        # probably I have to load them again
-        # raw_crop.set_annotations(annot_from_file)
 
         raw_ica_filtered = raw_crop.copy().filter(l_freq = 1., h_freq=30)
         ica = mne.preprocessing.ICA(n_components=15, max_iter="auto", random_state=95)
         ica.fit(raw_ica_filtered, reject_by_annotation=True)
 
-        # Save out ICA solution
-        # ica.save(pjoin(RESULTS_PATH, 'ICA', subj_label + '-ica.fif')
+        # Save ICA solution
+        ica.save(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'))
 
         # plot components
         fig_sources = ica.plot_sources(raw_crop, title=f"AFTER: ICs Timecourses for Sub-{sub}", show_scrollbars=False) 
         fig_components = ica.plot_components(title=f"ICs for Sub-{sub}")
         fig_components.savefig(os.path.join(DERIV_DIR, "ica", f'{sub}_ics.png'))
 
-    # probably its not possible to separate these two steps, cause right now they are dependent on one another
+   
     if APPLY_ICA:
 
         # but I guess it also should be possible to save the ICA solution in the previous step & load it again
-        #ica = read_ica(pjoin(RESULTS_PATH, 'ICA', subj_label + '-ica.fif'))
+        ica = mne.preprocessing.read_ica(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'))
         
         if not os.path.isfile(os.path.join(DERIV_DIR, 'ica', f'{sub}_components')):
 
@@ -243,19 +237,21 @@ def preprocessing(sub):
             # save subject solution as pickle object
             with open(os.path.join(DERIV_DIR, 'ica', f'{sub}_components'), 'wb') as fp:
                 pickle.dump(components, fp)
+                components_loaded = pickle.load(fp)
 
         else:
-            print("COMPONENTS FOR SUB-{sub} EXIST & ARE BEING LOADED")
+            print(f"\nCOMPONENTS FOR SUB-{sub} EXIST & ARE BEING LOADED\n")
+
             # load subject solution using pickle
             with open(os.path.join(DERIV_DIR, 'ica', f'{sub}_components'), 'rb') as fp:
                 components_loaded = pickle.load(fp)
 
-        print("LOADED THE FOLLOWING COMPONENTS:\n", components_loaded)
+        print("\nLOADED THE FOLLOWING COMPONENTS:", components_loaded, "\n")
             
         # select which components to exclude
         ica.exclude = components_loaded
 
-        # ica.apply() changes the Raw object in-place, so let's make a copy first
+        # ica.apply changes Raw object in-place, so let's make a copy first
         reconst_raw = raw_crop.copy()
         ica.apply(reconst_raw)
 
@@ -265,9 +261,16 @@ def preprocessing(sub):
         # plot the signal after applying ICA and removal of ocular components 
         reconst_raw.plot(block=True)
 
-        # save the cleaned raw data (i.e. reconst_raw) in a new .fif file for each subject, in subject-specific folder
-        print("SAVING PREPROCESSED DATA")
-        reconst_fname = os.path.join(RAW_CLEANED, f'sub-{sub}-raw_cleaned.fif')
+        ## save the cleaned raw data (i.e. reconst_raw) in a new .fif file for each subject, in subject-specific folder
+        # Create subject-specific folder 
+        RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, f"sub-{sub}")
+
+        if not os.path.isdir(RAW_CLEANED_SUB):
+            os.mkdir(RAW_CLEANED_SUB)
+
+        print("\nSAVING PREPROCESSED DATA\n ")
+
+        reconst_fname = os.path.join(RAW_CLEANED_SUB, f'sub-{sub}-raw_cleaned.fif')
         reconst_raw.save(reconst_fname)
 
 
@@ -277,7 +280,7 @@ def preprocessing(sub):
     if RUN_EPOCHS: 
 
         # load subjects ICA solution
-        print(f"LOADING CLEANED DATA FOR SUB-{sub} \n")
+        print(f"\nLOADING CLEANED DATA FOR SUB-{sub} \n")
         reconst_fname = os.path.join(RAW_CLEANED, f'sub-{sub}-raw_cleaned.fif')
         reconst_raw = mne.io.read_raw_fif(reconst_fname)
 
@@ -285,7 +288,7 @@ def preprocessing(sub):
         print("INFO OBJECT OF:", reconst_raw.info)
 
 
-        print(f"NOW RUNNING EPOCHS FOR SUB-{sub} \n")
+        print(f"NOW RUNNING EPOCHS FOR SUB-{sub}\n")
 
         # input: cleaned data (after ICA and manual rejection of bad spans)
         epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=(-0.5, 0), reject_by_annotation=True)
@@ -296,73 +299,13 @@ def preprocessing(sub):
         plot_dropped = epochs_after_rejection.plot_drop_log()
 
         # adjust output directory
-        # plot_dropped.savefig(os.path.join(DERIV_DIR, 'Fixed', 'Dropped_veog_eog_300_microvolt', f'{sub}_drop_log_eeo_veog_heog_reject_shorter_epochs.png'))
+        # plot_dropped.savefig(os.path.join())
 
         # compute the channel stats based on a drop_log from epochs (returns total percentage of epochs dropped)
         dropped_percent = epochs_after_rejection.drop_log_stats()
         print(dropped_percent)
-        print(type(dropped_percent))
 
         # save the epochs
-
-########################################################
-## EVOKED RESPONSES 
-
-    if RUN_EVOKED:
-        # AUTOMATION
-
-        # compute evoked response
-        # epochs = mne.Epochs(raw_filtered, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None, reject = reject_criteria, flat = flat_criteria)
-        epochs = mne.Epochs(raw_crop, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None)
-        # evoked responses for encoding phase
-        evoked_left = epochs[["Encoding Stimulus Onset Baseline Left", "Encoding Stimulus Onset Distraction Left Target"]].average().plot(titles=f"{sub} Evoked - Left Attend", picks = 'eeg')
-        evoked_right = epochs[["Encoding Stimulus Onset Baseline Right", "Encoding Stimulus Onset Distraction Right Target"]].average().plot(titles=f"{sub} Evoked - Right Attend", picks = 'eeg')
-        evoked_base = epochs[["Encoding Stimulus Onset Baseline Left", "Encoding Stimulus Onset Baseline Right"]].average().plot(titles=f"{sub} Evoked - Low Distraction Attend", picks = 'eeg')
-        evoked_dist = epochs[["Encoding Stimulus Onset Distraction Left Target", "Encoding Stimulus Onset Distraction Right Target"]].average().plot(titles=f"{sub} Evoked - High Distraction Attend", picks = 'eeg')
-        evoked_cue = epochs["Fixation Onset Enc"].average().plot(titles=f"{sub} Evoked - Fixation Cue", picks = 'eeg')
-
-        # save the evoked plots 
-        evoked_left.savefig(os.path.join(DERIV_DIR, f'evoked_enc_left_{sub}.png'))
-        evoked_right.savefig(os.path.join(DERIV_DIR, f'evoked_enc_right_{sub}.png'))
-        evoked_base.savefig(os.path.join(DERIV_DIR, f'evoked_enc_baseline_{sub}.png'))
-        evoked_dist.savefig(os.path.join(DERIV_DIR, f'evoked_enc_distraction_{sub}.png'))
-        evoked_cue.savefig(os.path.join(DERIV_DIR, f'evoked_enc_fixcue_{sub}.png'))
-
-        # evokeds = dict(low_dist=l_aud, high_dist=l_vis)
-        # fig_evoked_compared mne.viz.plot_compare_evokeds(evokeds,  combine="mean")
-        # fig_evoked_compared.savefig()
-
-        # evoked responses for retrieval phase
-        # evoked_ret_dist_left = epochs['Retrieval Stimulus Onset Distraction Left Target'].average().plot()
-        # evoked_ret_base_left = epochs['Retrieval Stimulus Onset Baseline Left'].average().plot()
-        
-
-    if RUN_FOOOF: 
-
-        # to fit power spectrum models, we need to calculate power spectra
-        print("CALCULATING POWER SPECTRA")
-
-        # calculate power spectra across the continuous data (now we are taking all of the data into account)
-        # but can you also run fooof on epoched data? - check documentation!
-
-        psd = reconst_raw.compute_psd(method = "welch", fmin = 1, fmax=30, tmin=0, tmax=250, n_overlap=150, n_fft=300)
-
-        spectra, freqs = psd.get_data(return_freqs=True)
-
-
-        ## Fitting Power Spectrum Models
-        # Initialize a FOOOFGroup object, with desired settings
-        fg = fooof.FOOOFGroup(peak_width_limits=[1, 6], min_peak_height=0.15,
-                peak_threshold=2., max_n_peaks=6, verbose=False)
-
-        # Define the frequency range to fit
-        freq_range = [1, 30]
-
-        # Fit the power spectrum model across all channels
-        fg.fit(freqs, spectra, freq_range)
-
-        # Check the overall results of the group fits
-        fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}", )
 
 
 if __name__ == "__main__":
