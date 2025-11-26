@@ -36,21 +36,24 @@ RUN_EPOCHS = True
 RUN_EVOKED = False
 RUN_FOOOF = False
 RUN_TIMESCALES = True
+RUN_TIMESCALES_2D = True
 
 
 def analyses(sub):
+    
+    ### Decouple
 
     if RUN_EPOCHS: 
 
         # load cleaned data for subject
         print(f"LOADING CLEANED DATA FOR SUB-{sub}\n")
-        RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, f"sub-{sub}")
-        reconst_fname = os.path.join(RAW_CLEANED_SUB, f'sub-{sub}-raw_cleaned.fif')
+        reconst_fname = f'sub-{sub}-raw_cleaned.fif'
+        RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, reconst_fname)
         
         # it takes forever to load, therefore specify preload = False
-        reconst_raw = mne.io.read_raw_fif(reconst_fname, preload=False)
+        reconst_raw = mne.io.read_raw_fif(RAW_CLEANED_SUB, preload=False)
 
-        # find events (not sure if I have to load events again...)
+        # find events (I could also save them out)
         events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
         events[:,2] = events[:, 2] - 64512
 
@@ -60,13 +63,20 @@ def analyses(sub):
         # Do I need to load the annotations again??
         epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=(-0.5, 0), reject_by_annotation=True)
 
-        # save the epochs
-        print("SUCCESSFULLY CREATED EPOCHS")
+        # save epoched data
+        epochs_fname = reconst_fname.replace('-raw_cleaned.fif', '-epo.fif')  
+        print("This is the file name: ", epochs_fname)
+        epochs.save(os.path.join(DERIV_DIR, "epochs", epochs_fname), overwrite=True) 
+
+        print("SUCCESSFULLY CREATED & SAVED EPOCHS")
+
 
 ########################################################
 ## EVOKED RESPONSES 
 
     if RUN_EVOKED:
+
+        ## old code - needs fixing!
 
         # compute evoked response
         epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None, reject_by_annotation = True)
@@ -112,7 +122,7 @@ def analyses(sub):
         fg.fit(freqs, spectra, freq_range)
 
         # Check the overall results of the group fits
-        fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}", )
+        fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}") # specify output directory!
 
 
 ########################################################
@@ -136,7 +146,7 @@ def analyses(sub):
         sig, times = reconst_raw.get_data(mne.pick_channels(reconst_raw.ch_names, [ch_label]),
                                 start=t_start, stop=t_stop, return_times=True)
         
-        # not sure why we need to squeeze the signal here
+        # not sure why we need to squeeze the signal here - collapse extra dimension
         print("\nSIGNAL BEFORE SQEEZING:\n", sig.shape) # (1,  10240)
 
         sig = np.squeeze(sig) 
@@ -149,15 +159,16 @@ def analyses(sub):
         psd_robust.compute_spectrum(sig, fs)
         psd_robust.fit(method='huber')
 
-        # okay this is interesting - so apparently psd.plot method returns an axes object
+        # okay this is interesting - so apparently psd.plot method returns an axes object (and not a figure object)
+        # here we are plotting the fitted powerspectrum but for one random channel (P3) and random time
         fig, ax = plt.subplots() 
         psd_robust.plot(ax=ax)       
         fig.savefig(f"psd_fit_sub-{sub}.png")
         plt.close(fig)
 
    
-########################################################
-# On real epochs
+        ########################################################
+        # On epoched data - 1D array
         print(f"\nFITTING TIMESCALES FOR SUB-{sub}\n")
 
         # here we are averaging all of the epochs (after rejection bad spans) - but should I be doing this?
@@ -180,9 +191,9 @@ def analyses(sub):
         print(psd_fixation.get_data())
 
         print(psd_fixation.get_data().shape)  # >> returns: (430, 32, 56)
-        # I guess 56 refers to the frequencies?
+        # I guess 56 refers to the frequencies?, yes
 
-######## Do it again, but this time average the epochs before 
+        # Do it again, but this time average the epochs before 
         psd_fixation_average = epochs_fixation.average().compute_psd(fmin = 2, fmax = 30)
         print(psd_fixation_average.get_data())
 
@@ -195,8 +206,7 @@ def analyses(sub):
         print('Freqs', freqs)
 
         print(freqs.shape)
-        # What is the difference between EpochsSpectrum & EpochsSpectrumArray??
-
+        # What is the difference between EpochsSpectrum & EpochsSpectrumArray?
 
         ## Try to compute PSD fit using PSD object from timescales package
         psd_fix = PSD()
@@ -211,7 +221,7 @@ def analyses(sub):
         fig.savefig(f"psd_fixation_window_fit_sub-{sub}.png")
         plt.close(fig)
 
-##### Using ACF Objects
+        # Using ACF Objects (1D array of power)
         acf_fix = ACF()
         
         # but this is for entire signal (reconst raw) after calling get_data method
@@ -220,13 +230,41 @@ def analyses(sub):
         # fitting acf & plotting 
         fig, ax = plt.subplots()
 
-        # Exponential
+        # Exponential Decay Model
         acf_fix.fit()
         acf_fix.plot(ax=ax, title='Exponential Decay Model')
 
         fig.savefig(f"acf_fit_fixation_window_sub-{sub}.png")
         plt.close(fig)
+        
+
+def timescales_2d(sub):
+        # On Epoched Data - 2D array
+        print(f"\nFITTING TIMESCALES ACROSS ALL CHANNELS FOR SUB-{sub}\n")
+
+        # load the epoched data
+        epochs_fname = f'sub-{sub}-epo.fif'
+        epochs = mne.read_epochs(os.path.join(DERIV_DIR, "epochs", epochs_fname), preload=False)
+
+        print(epochs.info)
+        print(epochs.info["ch_names"])
+
+        # pick only eeg channels
+        eeg_chs = mne.pick_types(epochs.info, eeg = True)
+        # but I also need the corresponding channel names
+
+        # to double check
+        print(eeg_chs.shape)
+
+        # for ch in eeg_chs:
+             
+             
+
+
+
+
 
 if __name__ == "__main__":
-    analyses(sub=param1)
+    # analyses(sub=param1)
+    timescales_2d(sub=param1)
 

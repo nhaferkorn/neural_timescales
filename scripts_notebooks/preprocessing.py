@@ -261,17 +261,10 @@ def preprocessing(sub):
         # plot the signal after applying ICA and removal of ocular components 
         reconst_raw.plot(block=True)
 
-        ## save the cleaned raw data (i.e. reconst_raw) in a new .fif file for each subject, in subject-specific folder
-        # Create subject-specific folder 
-        RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, f"sub-{sub}")
-
-        if not os.path.isdir(RAW_CLEANED_SUB):
-            os.mkdir(RAW_CLEANED_SUB)
-
         print("\nSAVING PREPROCESSED DATA\n ")
 
-        reconst_fname = os.path.join(RAW_CLEANED_SUB, f'sub-{sub}-raw_cleaned.fif')
-        reconst_raw.save(reconst_fname)
+        reconst_fname = f'sub-{sub}-raw_cleaned.fif'
+        reconst_raw.save(os.path.join(RAW_CLEANED, reconst_fname))
 
 
 ########################################################
