@@ -6,9 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import mne
 import fooof 
-import re
 import pickle
-
 
 # import functions from timescales package
 from statsmodels.tsa.stattools import acf as compute_acf
@@ -40,8 +38,6 @@ RUN_TIMESCALES_2D = True
 
 
 def analyses(sub):
-    
-    ### Decouple
 
     if RUN_EPOCHS: 
 
@@ -50,17 +46,15 @@ def analyses(sub):
         reconst_fname = f'sub-{sub}-raw_cleaned.fif'
         RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, reconst_fname)
         
-        # it takes forever to load, therefore specify preload = False
         reconst_raw = mne.io.read_raw_fif(RAW_CLEANED_SUB, preload=False)
 
-        # find events (I could also save them out)
+        # find events (I could also save them)
         events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
         events[:,2] = events[:, 2] - 64512
 
         print(f"\nNOW RUNNING EPOCHS FOR SUB-{sub}\n")
 
         # input: cleaned data (post ICA + manual rejection)
-        # Do I need to load the annotations again??
         epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1, tmax=1, baseline=(-0.5, 0), reject_by_annotation=True)
 
         # save epoched data
@@ -68,15 +62,14 @@ def analyses(sub):
         print("This is the file name: ", epochs_fname)
         epochs.save(os.path.join(DERIV_DIR, "epochs", epochs_fname), overwrite=True) 
 
-        print("SUCCESSFULLY CREATED & SAVED EPOCHS")
-
+        print("\nSUCCESSFULLY CREATED & SAVED EPOCHS")
 
 ########################################################
 ## EVOKED RESPONSES 
 
     if RUN_EVOKED:
 
-        ## old code - needs fixing!
+        ## OLD CODE - TO BE FIXED
 
         # compute evoked response
         epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -2, tmax=2, baseline=None, reject_by_annotation = True)
@@ -95,17 +88,14 @@ def analyses(sub):
         evoked_dist.savefig(os.path.join(DERIV_DIR, f'evoked_enc_distraction_{sub}.png'))
         evoked_cue.savefig(os.path.join(DERIV_DIR, f'evoked_enc_fixcue_{sub}.png'))
 
-
-
 ########################################################
 ## SPECTRAL PARAMETERIZATION 
  
     if RUN_FOOOF: 
+        # check how to run fooof on epoched data; I probably don't even need this code snippet
 
-        # to fit power spectrum models, we need to calculate power spectra
         print("CALCULATING POWER SPECTRA")
 
-        # Run fooof on epoched data? - check documentation!
         psd = reconst_raw.compute_psd(method = "welch", fmin = 1, fmax=30, tmin=0, tmax=250, n_overlap=150, n_fft=300)
 
         spectra, freqs = psd.get_data(return_freqs=True)
@@ -115,25 +105,26 @@ def analyses(sub):
         fg = fooof.FOOOFGroup(peak_width_limits=[1, 6], min_peak_height=0.15,
                 peak_threshold=2., max_n_peaks=6, verbose=False)
 
-        # Define the frequency range to fit
+        # Define the frequency range 
         freq_range = [1, 30]
 
         # Fit the power spectrum model across all channels
         fg.fit(freqs, spectra, freq_range)
 
-        # Check the overall results of the group fits
-        fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}") # specify output directory!
+        # Check the overall results of the group fits; change output directory 
+        fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}", file_path = os.path.join(DERIV_DIR,'timescales')) 
 
 
 ########################################################
 ## TIMESCALE ANALYSIS
 
     if RUN_TIMESCALES: 
+        ## Copied from Neurodsp Tutorial
         print(f"\nFITTING TIMESCALES TUTORIAL\n")
-
-        # Copied from Neurodsp Tutorial
+        
         # Grab the sampling rate from the data
         fs = reconst_raw.info['sfreq']
+
         # Settings for exploring an example channel of data
         ch_label = 'P3'
         t_start = 20000
@@ -142,7 +133,7 @@ def analyses(sub):
         # print ch_names
         print(reconst_raw.info['ch_names'])
 
-        #vExtract an example channel to explore
+        # Extract one channel for exploration
         sig, times = reconst_raw.get_data(mne.pick_channels(reconst_raw.ch_names, [ch_label]),
                                 start=t_start, stop=t_stop, return_times=True)
         
@@ -160,7 +151,7 @@ def analyses(sub):
         psd_robust.fit(method='huber')
 
         # okay this is interesting - so apparently psd.plot method returns an axes object (and not a figure object)
-        # here we are plotting the fitted powerspectrum but for one random channel (P3) and random time
+        # here we are plotting the fitted powers pectrum but for one random channel (P3) and random time period
         fig, ax = plt.subplots() 
         psd_robust.plot(ax=ax)       
         fig.savefig(f"psd_fit_sub-{sub}.png")
@@ -174,13 +165,9 @@ def analyses(sub):
         # here we are averaging all of the epochs (after rejection bad spans) - but should I be doing this?
         epochs_fixation = epochs["Fixation Onset Enc"]
 
-        
         print(f"\nEPOCHS LOCKED TO FIXATION ONSET", epochs_fixation, '\n')
 
-        # plot them for all EEG channels
-        # epochs_fixation.plot()
-
-        # compute spectrum object: returns EpochsSpectrum objects -
+        # compute spectrum object:
         # and I probably need to call the get_data method
         psd_fixation = epochs_fixation.compute_psd(fmin = 2, fmax = 30)
 
@@ -191,8 +178,7 @@ def analyses(sub):
         print(psd_fixation.get_data())
 
         print(psd_fixation.get_data().shape)  # >> returns: (430, 32, 56)
-        # I guess 56 refers to the frequencies?, yes
-
+       
         # Do it again, but this time average the epochs before 
         psd_fixation_average = epochs_fixation.average().compute_psd(fmin = 2, fmax = 30)
         print(psd_fixation_average.get_data())
@@ -206,12 +192,13 @@ def analyses(sub):
         print('Freqs', freqs)
 
         print(freqs.shape)
+        
         # What is the difference between EpochsSpectrum & EpochsSpectrumArray?
 
         ## Try to compute PSD fit using PSD object from timescales package
         psd_fix = PSD()
 
-        # right now, I am just fitting it for a random channel - but maybe I should also pool across all channel
+        # right now, I am just fitting it for a random channel - consider pooling across all channels
         psd_fix = PSD(freqs, power[1])
 
         psd_fix.fit(method='huber')
@@ -224,10 +211,10 @@ def analyses(sub):
         # Using ACF Objects (1D array of power)
         acf_fix = ACF()
         
-        # but this is for entire signal (reconst raw) after calling get_data method
+        # but this is for entire signal (reconst raw)!! after calling get_data method
         acf_fix.compute_acf(power[1], fs)
 
-        # fitting acf & plotting 
+        # fitting acf & plot
         fig, ax = plt.subplots()
 
         # Exponential Decay Model
@@ -250,21 +237,15 @@ def timescales_2d(sub):
         print(epochs.info["ch_names"])
 
         # pick only eeg channels
-        eeg_chs = mne.pick_types(epochs.info, eeg = True)
+        eeg_ch_idxs = mne.pick_types(epochs.info, eeg = True)
+        
         # but I also need the corresponding channel names
+        eeg_chs_names = mne.pick_channels(epochs.info, exclude = ['EXG5', 'EXG6', 'VEOG', 'HEOG', 'Status'], include = [])
 
-        # to double check
-        print(eeg_chs.shape)
-
-        # for ch in eeg_chs:
-             
-             
-
-
-
-
+        # double check
+        print(eeg_ch_idxs.shape)
 
 if __name__ == "__main__":
-    # analyses(sub=param1)
+    analyses(sub=param1)
     timescales_2d(sub=param1)
 
