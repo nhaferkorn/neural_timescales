@@ -1,4 +1,4 @@
-"""This script analyses the cleaned EEG data"""
+"""This script analyses the cleaned EEG data."""
 
 import os
 import sys
@@ -30,6 +30,7 @@ from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_D
 # set system variables
 param1 = sys.argv[1]
 
+# for next project move these into functions and pass as arguments
 RUN_EPOCHS = True
 RUN_EVOKED = False
 RUN_FOOOF = False
@@ -50,6 +51,7 @@ def analyses(sub):
         # find events (I could also save them)
         events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
         events[:,2] = events[:, 2] - 64512
+
 
         print(f"\nNOW RUNNING EPOCHS FOR SUB-{sub}\n")
 
@@ -117,134 +119,107 @@ def analyses(sub):
 ########################################################
 ## TIMESCALE ANALYSIS
 
-    if RUN_TIMESCALES: 
+    # if RUN_TIMESCALES: 
 
-        ## FIT ON RAW DATA
-        print(f"\nFITTING TIMESCALES TUTORIAL\n")
+    #     ## FIT ON RAW DATA
+    #     print(f"\nFITTING TIMESCALES TUTORIAL\n")
         
-        # Grab the sampling rate from the data
-        fs = reconst_raw.info['sfreq']
+    #     # Grab the sampling rate from the data
+    #     fs = reconst_raw.info['sfreq']
 
-        # Settings for exploring an example channel of data
-        ch_label = 'P3'
-        t_start = 20000
-        t_stop = int(t_start + (10 * fs))
+    #     print("THIS IS THE SRATE: ", epochs.info['sfreq'])
 
-        # print ch_names
-        print(reconst_raw.info['ch_names'])
+    #     # Settings for exploring an example channel of data
+    #     ch_label = 'P3'
+    #     t_start = 20000
+    #     t_stop = int(t_start + (10 * fs))
 
-        # Extract one channel for exploration
-        sig, times = reconst_raw.get_data(mne.pick_channels(reconst_raw.ch_names, [ch_label]),
-                                start=t_start, stop=t_stop, return_times=True)
+    #     # print ch_names
+    #     print(reconst_raw.info['ch_names'])
+
+    #     # Extract one channel for exploration
+    #     sig, times = reconst_raw.get_data(mne.pick_channels(reconst_raw.ch_names, [ch_label]),
+    #                             start=t_start, stop=t_stop, return_times=True)
         
-        # squeeze signal to collapse extra dimension
-        print("\nSIGNAL BEFORE SQEEZING:\n", sig.shape) # (1,  10240)
+    #     # squeeze signal to collapse extra dimension
+    #     # use assert statements more!
+    #     print("\nSIGNAL BEFORE SQEEZING:\n", sig.shape) # (1,  10240)
 
-        sig = np.squeeze(sig) 
+    #     sig = np.squeeze(sig) 
     
-        # check dimensions after squeezing
-        print("\nSIGNAL AFTER SQEEZING:\n", sig.shape) # (10240,)
+    #     # check dimensions after squeezing
+    #     print("\nSIGNAL AFTER SQEEZING:\n", sig.shape) # (10240,)
 
-        # Fit FOOOF robustly 
-        psd_robust = PSD()
-        psd_robust.compute_spectrum(sig, fs)
-        psd_robust.fit(method='huber')
+    #     # Fit FOOOF robustly 
+    #     psd_robust = PSD()
+    #     psd_robust.compute_spectrum(sig, fs)
+    #     psd_robust.fit(method='huber')
 
-        # okay this is interesting - so apparently psd.plot method returns an axes object (and not a figure object)
-        # here we are plotting the fitted powers pectrum but for one random channel (P3) and random time period
-        fig, ax = plt.subplots() 
-        psd_robust.plot(ax=ax)       
-        fig.savefig(f"psd_fit_sub-{sub}.png")
-        plt.close(fig)
+    #     # extract tau parameter from psd
+    #     psd_timescales = psd_robust.tau # again only a single parameter (because its a single epoch)
+
+    #     print(psd_timescales)
+    #     print(type(psd_timescales))
 
    
 ######################################
 ## FIT TIMESCALES ON EPOCHED DATA (AVERAGE ACROSS FIXATION PERIOD EPOCHS)
 
-def timescales_average_trials(sub):
+def power_average_trials(sub):
+    """Compute power & frequencies for all fixation periods.
+
+    Args:
+        sub (_type_): subject ID
+    """
     
-        print(f"\nFITTING TIMESCALES AVERAGED ACROSS ALL FIXATION PERIODS FOR SUB-{sub}\n")
+    print(f"\nFITTING TIMESCALES AVERAGED ACROSS ALL (ENC & RET) FIXATION PERIODS FOR SUB-{sub}\n")
 
-        # load the epoched data
-        epochs_fname = f'sub-{sub}-epo.fif'
-        epochs = mne.read_epochs(os.path.join(DERIV_DIR, "epochs", epochs_fname), preload=True)
+    # load the epoched data
+    epochs_fname = f'sub-{sub}-epo.fif'
+    epochs = mne.read_epochs(os.path.join(DERIV_DIR, "epochs", epochs_fname), preload=True)
 
-        epochs_fixation = epochs['Fixation Onset Enc']
+    epochs_eeg = epochs.copy().pick(picks=["eeg"])
 
-        # compute spectrum object: AVERAGE EPOCHS BEFORE COMPUTING PSD
-        psd_fixation_average = epochs_fixation.average().compute_psd(fmin = 2, fmax = 30)
+    # select epochs both from encoding and retention phase
+    epochs_fixation = epochs[['Fixation Onset Enc', 'Fixation Onset Ret']]
 
-        print('SHAPE OF PSD AFTER AVERAGING:', psd_fixation_average.get_data().shape) # >> returns: 32, 56
+    # compute spectrum object: average epochs before computing psd
+    psd_fixation_average = epochs_fixation.average().compute_psd(fmin = 2, fmax = 30)
 
-        power, freqs = psd_fixation_average.get_data(return_freqs = True)
+    print('SHAPE OF PSD AFTER AVERAGING:', psd_fixation_average.get_data().shape) # >> returns: 32, 56
 
-        print(f'Power', power)
-        print('Shape of power', power.shape)
+    power, freqs = psd_fixation_average.get_data(return_freqs = True)
 
-        # ideally I would store them in a 2D numpy array
-        
-        # not sure if this works
-        # psd_array = np.array(power, freqs)
+    print('Shape of power', power.shape)
+    print('Shape of freqs', freqs.shape)
 
+    print('Type of power', type(power))
+    print("Type of freqs", type(freqs))
 
-      
-        psd_list = []
-
-        # for ch_idx in range(power.shape[0]):
-
-        #     ## Compute PSD fit
-        #     psd_fix = PSD()
-
-        #     psd_fix = PSD(freqs, power[ch_idx])
-
-        #     psd_fix.fit(method='huber')
-
-        #     psd_list.append(psd_fix)
-
-        #     # plot power spectrum - aperiodic fit for each channel
-        #     fig, ax = plt.subplots()     
-        #     psd_fix.plot(ax=ax)      
-        #     fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"psd_fixation_channel-{ch_idx}-sub-{sub}.png"))
-        #     plt.close(fig)
-
-        #     # compute acf fit 
-
-        #     # initialize ACF object (1D array of power)
-        #     acf_fix = ACF()
-            
-        #     acf_fix.compute_acf(power[ch_idx], epochs.info['sfreq'])
-
-        #     # plot acf
-        #     fig, ax = plt.subplots()
-
-        #     # exponential decay model
-        #     acf_fix.fit()
-        #     acf_fix.plot(ax=ax, title='Exponential Decay Model')
-
-        #     fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"acf_fit_fixation_channel-{ch_idx}-sub-{sub}.png"))
-        #     plt.close(fig)
-
-    
-        # print(len(psd_list)) # >> (32) PSD objects; one for each channel
+    # TODO: store in numpy array & return
+    return power, freqs
 
 
-        ## try with enumerate to loop over both indices and channel names
-        ## now this seems to work - but this is not the best solution 
 
-        ch_names = epochs.info['ch_names'][:power.shape[0]]  
 
-        ch_names_from_info = epochs.info['ch_names']
-        print("\nTHESE ARE THE CHANNEL NAMES FROM THE INFO OBJECT: ", ch_names_from_info)
+
+def timescales_average_trials(sub, epochs, freqs, power):
+        # TODO: Store in numpy arrays!!
+
+        # but this actually seems to work
+        ch_names = epochs.info['ch_names'][:power.shape[0]]  # double check this!!
 
         print("THESE ARE THE CHANNEL NAMES: ", ch_names)
         print("THESE ARE THE CHANNEL NAME SHAPE: ", len(ch_names))
         
+        psd_list = []
+        timescales_tau_list = []
 
-
+        # use pre-allocation of numpy array
         
         for ch_idx, ch_name in enumerate(ch_names):
 
-            ## Compute PSD fit
+            #Compute PSD fit
             psd_fix = PSD()
 
             psd_fix = PSD(freqs, power[ch_idx])
@@ -252,52 +227,85 @@ def timescales_average_trials(sub):
             psd_fix.fit(method='huber')
 
             psd_list.append(psd_fix)
-
-            # plot power spectrum - aperiodic fit for each channel
-            fig, ax = plt.subplots()     
-            psd_fix.plot(ax=ax)      
-            fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"sub-{sub}_psd_fix_ch-{ch_name}.png"))
-            plt.close(fig)
-
-            # compute acf fit 
-
-            # initialize ACF object (1D array of power)
-            acf_fix = ACF()
-            
-            acf_fix.compute_acf(power[ch_idx], epochs.info['sfreq'])
-
-            # plot acf
-            fig, ax = plt.subplots()
-
-            # exponential decay model
-            acf_fix.fit()
-            acf_fix.plot(ax=ax, title='Exponential Decay Model')
-
-            fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"sub-{sub}_acf_fix_ch-{ch_name}.png"))
-            plt.close(fig)
-
-    
-    ## save timescale parameters to list 
-
-
-
-   ### Try to compute topography plots of timescales
-    ## okay, 
-
-
-
         
 
-def timescales_single_trials(sub):
-    """ Computes psd and acf subjects for each epoch x channel pair.
+            # save the parameters, aka the timescale values
+            psd_timescales = psd_fix.tau
+            timescales_tau_list.append(psd_timescales)
 
-    Args:
-        sub (_type_): subject to be processed
+        
+            ## save timescale parameters to list - unit: seconds
+            print(timescales_tau_list)
+            print(len(timescales_tau_list)) # >> returns list with 32 entries of type np.float , so 1 timescale per channel (because its averaged over the epochs)
+
+            # convert list of numpy floats into np.array
+            timescales_tau_array = np.array(timescales_tau_list)
+
+            # nice, so this should have the right shape now
+            print(timescales_tau_array)
+
+            # it also allows me to set vlim: aka lower and upper bound of the colormap
+            mne.viz.plot_topomap(data = timescales_tau_array, pos = epochs_eeg.info, cmap = 'viridis')
+
+
+def plot_aperiodic_power(freqs, power, ch_names, sub):
+
+    psd_list = []
+
+    for ch_idx, ch_name in enumerate(ch_names):
+
+        #Compute PSD fit
+        psd_fix = PSD()
+
+        psd_fix = PSD(freqs, power[ch_idx])
+
+        psd_fix.fit(method='huber')
+
+        psd_list.append(psd_fix)
+    
+        # plot power spectrum - aperiodic fit for each channel
+        fig, ax = plt.subplots()     
+        psd_fix.plot(ax=ax)      
+        fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"sub-{sub}_psd_fix_ch-{ch_name}.png"))
+        plt.close(fig)
+
+
+
+
+def plot_acf(power, freqs, ch_names, epochs, sub):
+
+    for ch_idx, ch_name in enumerate(ch_names):
+
+        acf_fix = ACF()
+        
+        acf_fix.compute_acf(power[ch_idx], epochs.info['sfreq'])
+
+        # plot acf
+        fig, ax = plt.subplots()
+
+        # exponential decay model
+        acf_fix.fit()
+        acf_fix.plot(ax=ax, title='Exponential Decay Model')
+
+        fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"sub-{sub}_acf_fix_ch-{ch_name}.png"))
+        plt.close(fig)
+
+    
+     
+
+def timescales_single_trials(sub):
+
+    # TODO: 
+    # - implement selection of epochs following or preceeding certain markers
+
+
+
+    """ Computes psd and acf subjects for each epoch x channel pair.
 
     Returns a list of timescale.fit.psd.PSD objects of length (n_epochs x n_channels)
     """
 
-    print(f"\nFITTING SINGLE-TRIAL TIMESCALES ACROSS ALL CHANNELS FOR SUB-{sub}\n")
+    print(f"\nFITTING SINGLE-TRIAL TIMESCALES ACROSS ALL CHANNELS FOR SUB-{sub}\n") # FIXME
 
     # load the epoched data
     epochs_fname = f'sub-{sub}-epo.fif'
@@ -309,8 +317,7 @@ def timescales_single_trials(sub):
     print(epochs_eeg.info)
 
     # select fixation period epochs
-    epochs_fixation = epochs_eeg['Fixation Onset Enc'] # epochs.fif object
-
+    epochs_fixation = epochs_eeg[['Fixation Onset Enc', 'Fixation Onset Ret']] 
 
     # compute psd per epoch; spectral representation of each epoch stored in EpochsSpectrum object
     psd_fixation = epochs_fixation.compute_psd(fmin = 2, fmax = 30)
@@ -324,49 +331,49 @@ def timescales_single_trials(sub):
     print(power.shape) # >> (430, 32, 56)
     print(freqs.shape) # >> (56,)
 
-
-    # NOT IDEAL: because ideally I also want to keep track of the channel names
     # initialize empty list object
     psd_list = []
 
 
-    ## Nope, this doesn't really help
-    # map channel type to a list of channel indices using mne.channel_indices_by_type
-    # ch_idx_type = mne.channel_indices_by_type(epochs_eeg.info, picks = "eeg")
-
-    #print("CHANNEL INDICES BY TYPE DICTIONARY:", ch_idx_type)
-
-
-    # for ch_idx in range(power.shape[1]):
+    for ch_idx in range(power.shape[1]):
             
-    #         print(ch_idx) 
+            print(ch_idx) 
 
-    #         for epoch_idx in range(power.shape[0]):
+            for epoch_idx in range(power.shape[0]):
 
-    #             psd_fix = PSD()
+                psd_fix = PSD()
 
-    #             psd_fix = PSD(freqs, power[epoch_idx, ch_idx]) # index both the epoch and the channel
+                psd_fix = PSD(freqs, power[epoch_idx, ch_idx]) # index both the epoch and the channel
 
-    #             # append them to list
-    #             psd_list.append(psd_fix)
+                # append them to list
+                psd_list.append(psd_fix)
 
-    #             # fit 
-    #             psd_fix.fit(method='huber')
-
-
-    # # EXPECTED: 430x 32 timescales PSD objects
-    # print('Length of PSD list', len(psd_list))  # >> returns correct dimensions: 13760 list entries
+                # fit 
+                psd_fix.fit(method='huber')
 
 
+    # EXPECTED: 430x32 timescales PSD objects
+    print('Length of PSD list', len(psd_list))  # >> returns correct dimensions: 13760 list entries
 
 
 
+
+
+def main():
+
+    # set system variables
+    param1 = sys.argv[1]
+
+    # analyses(sub=param1)
+    power_average_trials(sub=param1)
+    # timescales_average_trials(sub=param1)
+    # timescales_single_trials(sub=param1)
+     
 
 
 
 
 if __name__ == "__main__":
-    # analyses(sub=param1)
-   # timescales_single_trials(sub=param1)
-    timescales_average_trials(sub=param1)
+     main()
+    
 
