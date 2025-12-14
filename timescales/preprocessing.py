@@ -7,16 +7,10 @@ import mne
 import fooof 
 import pickle
 
-sys.path.append('/project/4180000.57/neural_timescales/src')
+sys.path.append('/project/4180000.57/neural_timescales/timescales')
 
 # import variables and paths
 from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_DIR, RAW_CLEANED, keys
-
-########################################################
-## SETUP
-
-# set system variables
-param1 = sys.argv[1]
 
 
 def preprocessing(sub):
@@ -66,7 +60,7 @@ def plot_events(raw, sub):
     fig.savefig(os.path.join(DERIV_DIR, 'Events', f'Sub-{sub}_Events.png'))
 
 
-def run_annotations_rest(raw, events, sub):
+def annotate_rest(raw, events, sub):
         ##  Crop the signal before Practice Trial 1 and End of Retrieval
         events_mapping_blocks = mne.pick_events(events, include = [10, 93])
 
@@ -90,13 +84,16 @@ def run_annotations_rest(raw, events, sub):
         print(f"End Retrieval", annotations_mapping_blocks[1]["onset"])
 
         print("\nNOW CREATING THE CROPPED SIGNAL\n")
-        raw_crop = raw.crop(tmin = annotations_mapping_blocks[0]["onset"], tmax = annotations_mapping_blocks[1]["onset"])
+        raw_crop = raw.copy()
+        raw_crop.crop(tmin = annotations_mapping_blocks[0]["onset"], tmax = annotations_mapping_blocks[1]["onset"])
         
 
         ## Annotate rest periods 
         mapping_rests = {90:"Rest onset", 91:"Rest offset"}
 
         annot_from_events_rests = mne.annotations_from_events(events, event_desc = mapping_rests, sfreq = raw_crop.info["sfreq"], orig_time=raw_crop.info["meas_date"],)
+        
+        raw_crop.set_annotations(raw_crop.annotations + annot_from_events_rests)  # this line is crucial
 
         print("\nONSETS OF ANNOTATIONS FOR REST PERIODS:", raw_crop.annotations.onset)
         
@@ -116,7 +113,7 @@ def run_annotations_rest(raw, events, sub):
         print('ONSET RESTS', onsets_rests)
         print('DURATIONS RESTS', durations_rests)
 
-        descriptions_rest = ["BAD_Rest Period"] * len(onsets_rests)
+        descriptions_rest = ["BAD_Rest_Period"] * len(onsets_rests)
         orig_times = raw_crop.info["meas_date"]
 
         rest_annots = mne.Annotations(
@@ -128,23 +125,43 @@ def run_annotations_rest(raw, events, sub):
         raw_crop.set_annotations(annot_from_events_rests + rest_annots)
 
         # save rest period annotations & markers
-        raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"), overwrite = True)
+        if not os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif")):
+            raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
 
+        return raw_crop
 
 def annotate_bad_spans(sub, raw_crop):
+
+    if os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif")):
         ## Annotate bad spans of data
         print("\nREADING ANNOTATIONS FROM .FIF FILE")
+
+        rest_annotations_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
+
         annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
-        
-        print(annot_from_file)
+
+        print('THESE ARE THE ANNOTATIONS ALREADY SET', annot_from_file, rest_annotations_file)
 
         # annotate in interactive plot mode
-        raw_crop.set_annotations(annot_from_file, emit_warning=False)
+        raw_crop.set_annotations(annot_from_file + rest_annotations_file, emit_warning=False)
+
         raw_crop.plot(block=True)
 
         print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE \n")
         raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"), overwrite=True)
     
+    else:
+        rest_annotations_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
+        raw_crop.set_annotations(rest_annotations_file)
+
+        raw_crop.plot(block=True)
+
+        print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE \n")
+        raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
+    
+
+
+
 
 def find_eogs(raw_crop, sub):
         
@@ -226,7 +243,6 @@ def apply_ica(sub, raw_crop):
         reconst_raw = raw_crop.copy()
         ica.apply(reconst_raw)
 
-
         print('PLOTTING SIGNAL AFTER BLINK REMOVAL')
         reconst_raw.plot(block=True)
 
@@ -264,13 +280,5 @@ def run_epochs(sub, events):
     # print(dropped_percent)
 
 
-
-
 if __name__ == "__main__":
-    
-    raw_cropped, events_sub = preprocessing(sub=param1)
-
-    # TODO: both of these only work, if the file doesn't exist already, implement something to catch that
-    # annotate_bad_spans(sub=param1, raw_crop=raw_cropped)
-
-    apply_ica(param1, raw_cropped)
+    pass
