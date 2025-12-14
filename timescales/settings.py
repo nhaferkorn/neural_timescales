@@ -13,21 +13,17 @@ DERIV_DIR = os.path.join(PROJECT_DIR, "derivatives")
 RAW_CLEANED = os.path.join(DERIV_DIR, "raw_cleaned") # make sure if this works
 
 
-# Path to BIDS root directory
-BIDS_ROOT = os.path.join(DATA_DIR, 'data_bids')
+# # Path to BIDS root directory
+# BIDS_ROOT = os.path.join(DATA_DIR, 'data_bids')
 
-SUBJ_DIR = os.path.join(BIDS_ROOT, "eeg")
+# SUBJ_DIR = os.path.join(BIDS_ROOT, "eeg")
 
-for subj in glob.glob(os.path.join(BIDS_ROOT, "sub-*")):
-    EEG_BIDS_DIR = os.path.join(subj, "eeg")
-    print(EEG_BIDS_DIR)
+# for subj in glob.glob(os.path.join(BIDS_ROOT, "sub-*")):
+#     EEG_BIDS_DIR = os.path.join(subj, "eeg")
+#     print(EEG_BIDS_DIR)
 
 # Set up experimental variables
 TASK = "dseeg"
-
-# REPORT_DIR = os.path.join(PROJECT_DIR, "docs")
-# DERIVATIVES_DIR = os.path.join(DATA_DIR, "derivatives")
-# # make subject folders in derivatives directory!
 
 
 DESCRIPTION = ['Misc_Offset', 'Start Practice Trial',
@@ -95,10 +91,9 @@ EVENT_DICT_CLEAN = dict(zip(['Start Practice Trial',
 #  heogl (horizontal EOG left): EXG1
 #  heogr (horizontal EOG right): EXG2
 #  veogt (vertical EOG; top): EXG3
-    #  veogb (vertical EOG; bottom): EXG4
+#  veogb (vertical EOG; bottom): EXG4
 
-
-    # keys of all the events of interest (move into settings file)
+# keys of all the events of interest 
 keys = {'Start Practice Trial',
     'Start Encoding','Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
     ,'Fixation Onset Enc', 'Cue Onset', 
