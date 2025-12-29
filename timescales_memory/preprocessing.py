@@ -7,12 +7,10 @@ import mne
 import fooof 
 import pickle
 
-sys.path.append('/project/4180000.57/neural_timescales/timescales')
-
 # import variables and paths
-from settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_DIR, RAW_CLEANED, keys
+from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, EVENT_DICT_CLEAN, DERIV_DIR, RAW_CLEANED, keys
 
-
+# TODO: change function name
 def preprocessing(sub):
 
     # Print subject label 
@@ -31,7 +29,7 @@ def preprocessing(sub):
     # specify line noise frequency
     raw.info['line_freq'] = 50
 
-    # set montage directly on raw object (and not a copy of it!) > this creates a new entry in info object
+    # set montage directly on raw object 
     raw.set_montage("biosemi32", on_missing = "ignore")
     
     # set average reference: 
@@ -57,119 +55,131 @@ def plot_events(raw, sub):
     events, sfreq=raw.info["sfreq"], first_samp=raw.first_samp, event_id=events_of_interest, on_missing='ignore')
     fig.suptitle(f"Events-{sub}")
 
-    fig.savefig(os.path.join(DERIV_DIR, 'Events', f'Sub-{sub}_Events.png'))
+    fig.savefig(os.path.join(DERIV_DIR, 'events', f'Sub-{sub}_Events.png'))
 
 
 def annotate_rest(raw, events, sub):
-        ##  Crop the signal before Practice Trial 1 and End of Retrieval
-        events_mapping_blocks = mne.pick_events(events, include = [10, 93])
+    """Creates a cropped version of signal and annotates rest periods."""
 
-        # events dict
-        mapping_blocks = {10:"Start Encoding", 93:"End Retrieval"}
+    # events dict
+    mapping_start_end = {10:"Start Encoding", 93:"End Retrieval"}
 
-        # convert events array into annotation
-        annotations_mapping_blocks = mne.annotations_from_events(events, sfreq = raw.info["sfreq"], event_desc = mapping_blocks)
+    # convert events array into annotations
+    annotations_start_end = mne.annotations_from_events(events, sfreq = raw.info["sfreq"], event_desc = mapping_start_end)
 
-        # should result 3 annotations for most subjects
-        for ann in annotations_mapping_blocks:
-            print(ann["onset"])
+    # print for sanity check
+    print('ANNOTATIONS START_END ', annotations_start_end)
+
+    # should result 2 annotations for most subjects
+    for ann in annotations_start_end:
+        print(ann["onset"])
+    assert len(annotations_start_end) == 2, f'Not the right dimensions - expecting two markers but got {len(annotations_start_end)}'
+    
+    # # crop the data and cut-off segments before the start of encoding & after the end of retrieval
+    print(f"Start Encoding", annotations_start_end[0]["onset"])
+    print(f"End Retrieval", annotations_start_end[1]["onset"])
+
+    print("\nNOW CREATING THE CROPPED SIGNAL\n")
+    raw_crop = raw.copy()
+    raw_crop.crop(tmin = annotations_start_end[0]["onset"], tmax = annotations_start_end[1]["onset"])
+    
+    # assert that raw_crop is shorter than raw, else the cropping didn't work
+    assert raw_crop.duration <= raw.duration
+
+    ## Annotate rest periods 
+    mapping_rests = {90:"Rest onset", 91:"Rest offset"}
+
+    annot_from_events_rests = mne.annotations_from_events(events, event_desc = mapping_rests, sfreq = raw_crop.info["sfreq"], orig_time=raw_crop.info["meas_date"])
+    
+    raw_crop.set_annotations(raw_crop.annotations + annot_from_events_rests)
+
+    print("\nONSETS OF ANNOTATIONS FOR REST PERIODS: ", raw_crop.annotations.onset)
+
+    # set rest periods
+    onsets_rests = []
+    durations_rests = []
+
+    for i in range(0, len(raw_crop.annotations.onset)-1, 2):
         
-        assert len(annotations_mapping_blocks) == 2, 'not the right dimensions'
-     
-        # sanity check: plot those two events 
-        raw.plot(events_mapping_blocks, event_id = mapping_blocks, block = True)
+        # set onset of rest
+        onsets_rest = raw_crop.annotations.onset[i]
+        onsets_rests.append(onsets_rest)
 
-        # crop the data and cut-off segments before the start of encoding & after the end of retrieval
-        print(f"Start Encoding", annotations_mapping_blocks[0]["onset"])
-        print(f"End Retrieval", annotations_mapping_blocks[1]["onset"])
+        # set duration of rest
+        durations_rest = raw_crop.annotations.onset[i+1] - raw_crop.annotations.onset[i]
+        durations_rests.append(durations_rest)
 
-        print("\nNOW CREATING THE CROPPED SIGNAL\n")
-        raw_crop = raw.copy()
-        raw_crop.crop(tmin = annotations_mapping_blocks[0]["onset"], tmax = annotations_mapping_blocks[1]["onset"])
-        
+    # print('ONSET RESTS', onsets_rests)
+    # print('DURATIONS RESTS', durations_rests)
 
-        ## Annotate rest periods 
-        mapping_rests = {90:"Rest onset", 91:"Rest offset"}
+    descriptions_rest = ["BAD_Rest_Period"] * len(onsets_rests)
+    orig_times = raw_crop.info["meas_date"]
 
-        annot_from_events_rests = mne.annotations_from_events(events, event_desc = mapping_rests, sfreq = raw_crop.info["sfreq"], orig_time=raw_crop.info["meas_date"],)
-        
-        raw_crop.set_annotations(raw_crop.annotations + annot_from_events_rests)  # this line is crucial
+    rest_annots = mne.Annotations(
+        onset=onsets_rests, 
+        duration=durations_rests,
+        description=descriptions_rest,
+        orig_time=orig_times)
+    
+    raw_crop.set_annotations(annot_from_events_rests + rest_annots)
 
-        print("\nONSETS OF ANNOTATIONS FOR REST PERIODS:", raw_crop.annotations.onset)
-        
-        onsets_rests = []
-        durations_rests = []
+    ##  save rest period annotations & markers
+    # if not os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif")):
+    
+    raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"), overwrite = True)
 
-        for i in range(0, len(raw_crop.annotations.onset)-1, 2):
-            
-            # set onset of rest
-            onsets_rest = raw_crop.annotations.onset[i]
-            onsets_rests.append(onsets_rest)
-
-            # set duration of rest
-            durations_rest = raw_crop.annotations.onset[i+1] - raw_crop.annotations.onset[i]
-            durations_rests.append(durations_rest)
-
-        print('ONSET RESTS', onsets_rests)
-        print('DURATIONS RESTS', durations_rests)
-
-        descriptions_rest = ["BAD_Rest_Period"] * len(onsets_rests)
-        orig_times = raw_crop.info["meas_date"]
-
-        rest_annots = mne.Annotations(
-            onset=onsets_rests, 
-            duration=durations_rests,
-            description=descriptions_rest,
-            orig_time=orig_times)
-        
-        raw_crop.set_annotations(annot_from_events_rests + rest_annots)
-
-        # save rest period annotations & markers
-        if not os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif")):
-            raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
-
-        return raw_crop
+    return raw_crop
 
 def annotate_bad_spans(sub, raw_crop):
 
     if os.path.exists(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif")):
-        ## Annotate bad spans of data
-        print("\nREADING ANNOTATIONS FROM .FIF FILE")
-
-        rest_annotations_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
-
-        annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
-
-        print('THESE ARE THE ANNOTATIONS ALREADY SET', annot_from_file, rest_annotations_file)
-
-        # annotate in interactive plot mode
-        raw_crop.set_annotations(annot_from_file + rest_annotations_file, emit_warning=False)
-
-        raw_crop.plot(block=True)
-
-        print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE \n")
-        raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"), overwrite=True)
     
+        # 1. read annotations of rest periods
+        print("\nREADING ANNOTATIONS FOR REST PERIODS FROM REST_ANNOTATIONS FILE")
+        rest_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
+
+        # 2. read annotations of bad segments 
+        print("\nREADING ANNOTATIONS FOR BAD SEGMENTS FROM BAD_ANNOTATIONS FILE")
+        bad_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
+
+        # set annotations 
+        raw_crop.set_annotations(bad_annotations + rest_annotations, emit_warning=False)
+
+        # tell user that both rest annotations & bad segment annotations were set & ask if they want to review it
+        resp = input("Would you like to review / add more bad annotations  ? (y/n)")
+        if resp.lower() != "y":
+            return 
+        else:  
+            print('PLOTTING SIGNAL IN ANNOTATION MODE')
+            raw_crop.plot(block=True)
+
+            print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE \n")
+            raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"), overwrite=True)
+        
+            # print info object (and also check if bad channels have been marked)
+            print('BAD CHANNELS', raw_crop.info['bads'])
     else:
-        rest_annotations_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
-        raw_crop.set_annotations(rest_annotations_file)
+        rest_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-rest_annotations.fif"))
+        raw_crop.set_annotations(rest_annotations)
 
         raw_crop.plot(block=True)
 
-        print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE \n")
+        print("\nSAVING NEWLY ADDED ANNOTATIONS OF BAD SEGMENTS TO FILE\n")
         raw_crop.annotations.save(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
-    
 
+        print('BAD CHANNELS', raw_crop.info['bads'])
+
+    return raw_crop
 
 
 
 def find_eogs(raw_crop, sub):
         
         # load saved annotations 
-        annot_from_file = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
+        bad_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "raw_annotations", f"{sub}-annotations.fif"))
 
         # set annotations
-        raw_crop.set_annotations(annot_from_file)
+        raw_crop.set_annotations(bad_annotations)
 
         # find eog events & plot them on top of raw data
         eog_events = mne.preprocessing.find_eog_events(raw_crop, reject_by_annotation = True)
@@ -192,7 +202,7 @@ def find_eogs(raw_crop, sub):
         mne.viz.plot_projs_topomap(eog_projs, info=raw_crop.info)
 
 
-
+## TODO: set seed to make it reproducible!!
 def fit_ica(sub, raw_crop):
 
         raw_ica_filtered = raw_crop.copy().filter(l_freq = 1., h_freq=30)
@@ -200,21 +210,25 @@ def fit_ica(sub, raw_crop):
         ica.fit(raw_ica_filtered, reject_by_annotation=True)
 
         # Save ICA solution
-        ica.save(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'))
+        ica.save(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'), overwrite=True)
 
+        ## FIXME: why is the plotted signal so incredibly noisy??
         # plot components
         fig_sources = ica.plot_sources(raw_crop, title=f"AFTER: ICs Timecourses for Sub-{sub}", show_scrollbars=False) 
         fig_components = ica.plot_components(title=f"ICs for Sub-{sub}")
         fig_components.savefig(os.path.join(DERIV_DIR, "ica", f'{sub}_ics.png'))
 
-   
+
+
+## TODO: fix the ask for components (doesn't work)
 def apply_ica(sub, raw_crop):
+
     # check if already cleaned data exists
     if os.path.isfile(os.path.join(DERIV_DIR, 'raw_cleaned', f'sub-{sub}-raw_cleaned.fif')):
         raise FileExistsError
 
     else:
-        # load subjeccts ICA solution
+        # load subject's ICA solution
         ica = mne.preprocessing.read_ica(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'))
         
         if not os.path.isfile(os.path.join(DERIV_DIR, 'ica', f'{sub}_components')):
@@ -222,6 +236,7 @@ def apply_ica(sub, raw_crop):
             # ask for user input to indicate the components (separated by spaces)
             components = [int(x) for x in input("ENTER INDICES OF COMPONENTS TO REMOVE: ").split()]
             
+            # FIXME!! this also fails
             # save subject solution as pickle object
             with open(os.path.join(DERIV_DIR, 'ica', f'{sub}_components'), 'wb') as fp:
                 pickle.dump(components, fp)
@@ -239,7 +254,7 @@ def apply_ica(sub, raw_crop):
         # select which components to exclude
         ica.exclude = components_loaded
 
-        # ica.apply changes Raw object in-place, so let's make a copy first
+        # ica.apply changes raw object in-place, so let's make a copy first
         reconst_raw = raw_crop.copy()
         ica.apply(reconst_raw)
 
@@ -254,7 +269,7 @@ def apply_ica(sub, raw_crop):
 def run_epochs(sub, events):
 
     # load subjects ICA solution
-    print(f"\nLOADING CLEANED DATA FOR SUB-{sub} \n")
+    print(f"\nLOADING CLEANED DATA FOR SUB-{sub}\n")
     reconst_fname = os.path.join(RAW_CLEANED, f'sub-{sub}-raw_cleaned.fif')
     reconst_raw = mne.io.read_raw_fif(reconst_fname)
 
@@ -277,7 +292,7 @@ def run_epochs(sub, events):
     # compute the channel stats based on a drop_log from epochs (returns total percentage of epochs dropped)
     dropped_percent = epochs_after_rejection.drop_log_stats()
     
-    # print(dropped_percent)
+    print(dropped_percent)
 
 
 if __name__ == "__main__":

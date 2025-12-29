@@ -1,6 +1,6 @@
 #!/bin/bash
 # script to run:
-my_script=$PWD/preprocessing_cluster_function.py
+my_script=$PWD/preprocessing.py
 
 
 # submit for all subjects:
