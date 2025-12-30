@@ -10,17 +10,9 @@ DATA_DIR = os.path.join(os.path.join(PROJECT_DIR, 'data'))
 EEG_DIR = os.path.join(DATA_DIR,  'eeg')
 BEHAV_DIR = os.path.join(DATA_DIR,  'behavioral')
 DERIV_DIR = os.path.join(PROJECT_DIR, "derivatives")
+EPOCHS_DIR = os.path.join(DERIV_DIR, "epochs")
 RAW_CLEANED = os.path.join(DERIV_DIR, "raw_cleaned") # make sure if this works
 
-
-# # Path to BIDS root directory
-# BIDS_ROOT = os.path.join(DATA_DIR, 'data_bids')
-
-# SUBJ_DIR = os.path.join(BIDS_ROOT, "eeg")
-
-# for subj in glob.glob(os.path.join(BIDS_ROOT, "sub-*")):
-#     EEG_BIDS_DIR = os.path.join(subj, "eeg")
-#     print(EEG_BIDS_DIR)
 
 # Set up experimental variables
 TASK = "dseeg"
@@ -87,11 +79,6 @@ EVENT_DICT_CLEAN = dict(zip(['Start Practice Trial',
     ))
 
 
-#  create VEOG and HEOG channels
-#  heogl (horizontal EOG left): EXG1
-#  heogr (horizontal EOG right): EXG2
-#  veogt (vertical EOG; top): EXG3
-#  veogb (vertical EOG; bottom): EXG4
 
 # keys of all the events of interest 
 keys = {'Start Practice Trial',

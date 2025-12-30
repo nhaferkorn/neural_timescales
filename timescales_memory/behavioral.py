@@ -8,25 +8,12 @@ import scipy
 import numpy as np
 import pandas as pd
 
-# sys.path.append('/project/4180000.57/neural_timescales/timescales')
-
 # import variables and paths
-from timescales.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
-
+from timescales_memory.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
 
 # define helper functions
 def read_behav_data(sub, phase):
-    """Reads the .xlsx files for each subject as pandas data frame object.
-
-    Args:
-        sub (_type_): _description_
-        phase (_type_): _description_
-
-    Raises:
-        ValueError: _description_
-
-    Returns:
-        _type_: _description_
+    """Reads the .xlsx files for each subject as pd DataFrame.
     """
 
     if phase == 'enc':
@@ -39,15 +26,7 @@ def read_behav_data(sub, phase):
 
 
 def process_enc_data(sub, data):
-    """
-
-    Args:
-        sub (_int_): subject ID 
-        data (_type_): raw pandas dataframe
-
-    Returns:
-        _type_: processed pandas dataframe
-    """
+    """Excludes NaN values, and adds columns for correct encoding."""
 
     # replace 0 values with NAN
     data = data.replace(0, np.nan)
@@ -86,7 +65,7 @@ def process_enc_data(sub, data):
 
     values_correct = ['correct', 'correct', 'correct', 'correct']
 
-    data['Enc_accuracy'] = np.select(conditions_correct, values_correct,  default='incorrect') # default describes all of the values that are not true
+    data['Enc_accuracy'] = np.select(conditions_correct, values_correct,  default='incorrect') 
 
     # drop NA values
     data = data.dropna()
@@ -97,9 +76,10 @@ def process_enc_data(sub, data):
 
 
 def process_ret_data(sub, data):
-    print(data.info())
 
+    # encode NaN values
     data['Ret_RT'] = data['Ret_RT'].replace(0, np.nan)
+
 
     # Add column that encodes hits & misses (based on the trial type and the subjects respose)
     conditions = [
@@ -129,6 +109,7 @@ def process_ret_data(sub, data):
     ]
 
     # create list of values to assign to each condition
+    # TODO: rename to better names!!
     values = ['hit_low_dist_tar', 'hit_high_dist_tar', 'hit_distractor', 'miss_low_dist_tar', 'miss_high_dist_tar', 'miss_distractor', 'false_alarms', 'correct_new']
 
     # create a new column and use np.select
@@ -154,13 +135,11 @@ def process_ret_data(sub, data):
 
     data['confidence_category'] = np.select(conditions_confidence, values_confidence, default = None) # TODO: check whether None is treates as NaN value
 
-    # dropn NaN values
+    # drop NaN values
     data = data.dropna()
 
     # drop unnecessary columns
     data = data.drop(columns = ['Gender',  'Edu', 'TrialNr'])
-
-    print(data.head(5))
 
     # save data as new csv file
     data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', f'Ret_{sub}_processed.csv'), sep = ',', header = True, index = False)
@@ -169,13 +148,7 @@ def process_ret_data(sub, data):
 
 
 def encoding_accuracy(data):
-    """Count number of correctly encoded pictures during encoding phase.
-
-    Args:
-        data (_type_): _description_
-
-    Returns:
-        _type_: encoding accuracy in decimal notation
+    """Computes count of correctly encoded pictures during encoding phase.
     """
     count_correct = (data['Enc_accuracy'] == 'correct').sum()
     count_total = data['Enc_accuracy'].count()
@@ -186,37 +159,12 @@ def encoding_accuracy(data):
     return count_correct / count_total
 
 
-## TODO: this is super important to determine whether the picture was actually old or whether it as new
-#   for i=1:length(ppn.ret_pic_left)
-#                 % loop over enc trials
-#                 for e=1:length(ppn.enc_pic_left)
-#                     % find match between enc and ret trials
-
-def old_new_pictures(df_enc, df_ret):
-    # I guess separately for target and distractors
-    # but I thought that in the retrieval phase its only one picture at a time on the screen 
-
-    # but then also look at Ret_trialtype column
-    print(df_enc['Pic_left'])  # contains 360 pictures (sub 103)
-
-    print(df_ret['Pic_left'])  # contains 452 pictures (sub 103)
-
-    #FIXME: no, this is not gonna work out, because the two pictures lists are not of equal
-    # length, because I already dropped the non-response values!
-
-
-
-##FIXME: - cause right now it doesn't make sense
 def calculate_hitrate(data, trial_wise = False):
 
-    """Calculates hitrate, by taking the ratio of number 
-    of correct responses and number of total responses
-
-    Args:
-        data (pd.Dataframe): a pandas data frame of the retrieval data that contains column of hits
+    """Calculate hitrate, by taking the ratio of number 
+    of correct responses and number of total responses.
     """
 
-    # this seems to work - but test it
     if trial_wise == True:
 
         #  hits for low distraction targets
@@ -242,35 +190,30 @@ def calculate_hitrate(data, trial_wise = False):
         return (len(hits) / len(data))
 
 
-
-def calculate_fa_rate(data):  # FIXME
-    # TODO: Implement some tests to check if this actually works and matches Syanah's implementation
-    """Calculate false alarm rate as: False Positives / (False Positives + True Negatives).
-
-    Args:
-        data (pd.Dataframe): _description_
+# FIXME: check if implementation is correct!!
+def calculate_fa_rate(data): 
+    """Calculate FA Rate: False Positives / (False Positives + True Negatives).
     """
-
     # define false positives
     false_positives = data[data['hit_category'].str.contains('false_alarms')]
 
-    # define true negatives 
-    true_negatives = false_positives = data[data['hit_category'].str.contains('correct_new')]
+    print(len(false_positives))
+
+    # define true negatives - I think something with the definition went wrong
+    true_negatives = data[data['hit_category'].str.contains('correct_new')]
+
+    print(len(true_negatives)) 
 
     # return false alarm rate
     return len(false_positives) / (len(false_positives) + len(true_negatives))
 
 
-
-
-
-# FIXME: okay, so this won't work since I am only providing a single argument
+# TODO: Check if this is actually correct 
 def calculate_d_prime(hitrate, fa_rate):
     
     # standardize hitrate & false alarm rate
-
-    z_score_hitrate = scipy.stats.zscore(hitrate)
-    z_score_farate = scipy.stats.zscore(fa_rate)
+    z_score_hitrate = scipy.stats.norm.ppf(hitrate)
+    z_score_farate = scipy.stats.norm.ppf(fa_rate)
 
     print(z_score_hitrate)
     print(z_score_farate)
@@ -279,6 +222,7 @@ def calculate_d_prime(hitrate, fa_rate):
 
 
 def classify_age(data):
+    """Classifies subject as OA or YA."""
 
     if (data['Age'] > 40).any():
         return 'old'
@@ -287,22 +231,23 @@ def classify_age(data):
 
 
 def create_behavioral_summary(data):
-    # input pre-processed data
-    # output summary information to excel file (because then in the end, I can merge them)
-    pass
 
+    Sub_ID = data['ID'][0]
 
+    Age = classify_age(data)
 
-def behavioral_timescales():
+    Enc_Accuracy = encoding_accuracy(data)
+    print(Enc_Accuracy)
 
-    # "To extract the behavioral time-course, we shifted a 50ms window in steps of 1ms across all validly cued
-    # trials in the respective time window"
-
-    # TODO: look into how to implement sliding window across TS
-    # You can create sliding windows in pandas using the .resample() 
-    # and .rolling() methods. Make sure to .resample() to the size of your desired signal interval 
-    # instead of the size of your window: see https://medium.com/data-science/sliding-windows-in-pandas-40b79edefa34 
-    pass
+    df = pd.DataFrame({
+    'ID': [Sub_ID],
+    'AGE': [Age],
+    'ENCODING ACCURACY': [Enc_Accuracy]
+})
+    print(df)
+    # TODO: replace index column by subject ID columm
+    ## add columns for memory performance (d') global and local measures
+    ## also add RT from Retrieval Phase!
 
 
 def main():
@@ -333,21 +278,21 @@ def main():
 
     print("THIS IS THE FALSE ALARM RATE:", farate)
 
-    # d_prime_low = calculate_d_prime(hitrate_low, farate)
+    d_prime_low = calculate_d_prime(hitrate_low, farate)
+    
+    print("THIS IS D PRIME LOW", d_prime_low)
+    
     age = classify_age(data_enc)
 
     print('AGE CATEGORY:', age)
 
     enc_acc = encoding_accuracy(data_enc)
 
-    # okay nice - this works now
     print('ENCODING ACCURACY:', enc_acc)
 
-    old_new_pictures(df_enc=data_enc, df_ret=data_ret)
+    create_behavioral_summary(data=data_enc)
 
 
-
-    
 
 if __name__ == "__main__":
     main()
