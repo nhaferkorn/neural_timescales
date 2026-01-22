@@ -3,6 +3,7 @@
 import os
 import sys
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import mne
 import fooof 
@@ -65,34 +66,9 @@ def run_epochs(sub):
 
     return epochs
 
-## PLOT EPOCHS!
-def plot_epochs(sub, epochs):
-    print('PLOTTING EPOCHED DATA')
-    epochs.plot(block=True)
-
-
 def epochs_stats():
     """Compute # of dropped epochs, based on reject by annotation & bad channel criterions"""
     pass
-
-## EVOKED RESPONSES 
-def run_evokeds(sub, epochs):
-        
-    # evoked responses for encoding phase
-    evoked_left = epochs[["Encoding Stimulus Onset Baseline Left", "Encoding Stimulus Onset Distraction Left Target"]].average().plot(titles=f"{sub} Evoked - Left Attend", picks = 'eeg')
-    evoked_right = epochs[["Encoding Stimulus Onset Baseline Right", "Encoding Stimulus Onset Distraction Right Target"]].average().plot(titles=f"{sub} Evoked - Right Attend", picks = 'eeg')
-    evoked_base = epochs[["Encoding Stimulus Onset Baseline Left", "Encoding Stimulus Onset Baseline Right"]].average().plot(titles=f"{sub} Evoked - Low Distraction Attend", picks = 'eeg')
-    evoked_dist = epochs[["Encoding Stimulus Onset Distraction Left Target", "Encoding Stimulus Onset Distraction Right Target"]].average().plot(titles=f"{sub} Evoked - High Distraction Attend", picks = 'eeg')
-    evoked_cue = epochs["Fixation Onset Enc"].average().plot(titles=f"{sub} Evoked - Fixation Cue", picks = 'eeg')
-
-    # save plots
-    evoked_left.savefig(os.path.join(DERIV_DIR, 'evokeds', f'evoked_enc_left_{sub}.png'))
-    evoked_right.savefig(os.path.join(DERIV_DIR, 'evokeds', f'evoked_enc_right_{sub}.png'))
-    evoked_base.savefig(os.path.join(DERIV_DIR, 'evokeds', f'evoked_enc_baseline_{sub}.png'))
-    evoked_dist.savefig(os.path.join(DERIV_DIR, 'evokeds', f'evoked_enc_distraction_{sub}.png'))
-    evoked_cue.savefig(os.path.join(DERIV_DIR, 'evokeds', f'evoked_enc_fixcue_{sub}.png'))
-
-
 
 ## SPECTRAL PARAMETERIZATION 
 def run_fooof(sub, reconst_raw):
@@ -118,8 +94,117 @@ def run_fooof(sub, reconst_raw):
     fg.plot(save_fig = True, file_name = f"fooof_sub-{sub}", file_path = os.path.join(DERIV_DIR,'timescales')) 
 
 
+## FIT IN TIME-DOMAIN (ACF)
+def timescales_acf_evoked(evoked):
 
-## More generic implementation
+    """Use list apprehension to store the results of acf fit.
+
+    Args:
+        evoked (_type_): _description_
+
+    Returns:
+        list: of 32 numpy arrays (each containing the parameters of the acf fit (tau, hight & offset))
+    """
+
+    # get data (you can even specify tmin and tmax - which is super handy)
+    evoked_data = evoked.get_data()
+
+    # also check dimensions of evoked data
+    print("VIEW ON EVOKED DATA", evoked_data.shape)
+
+    # initialize empty list
+    acf_list = []
+
+    ## then fit a timescale object for each individual channel
+    for ch in range(evoked_data.shape[0]):
+
+        # initialize acf object
+        acf = ACF()
+
+        # initialize autocorrelation function
+        acf.compute_acf(evoked_data[ch][:], fs = evoked.info["sfreq"])
+
+        # fit autocorrelation function
+        acf.fit()
+
+        # print some output values
+        print("PARAMETER NAMES", acf.param_names)
+        print("FIRST FIVE PARAMETERS", acf.params[:5])
+
+        acf_list.append(acf.params)
+
+    print("ACF LIST", acf_list)
+    return acf
+
+
+
+# FIT IN TIME DOMAIN (NUMPY ARRAY ALLOCATION)
+def timescales_acf_evoked_np(sub, evoked, osc: bool = False):
+    """Use pre-allocation of numpy arrays to store the results of acf fit.
+
+    Args:
+        evoked (_type_): _description_
+
+    Returns:
+        ndarray: array of acf.fit parameters of shape (32, 3)
+    """
+
+    # get data (you can even specify tmin and tmax - which is super handy)
+    evoked_data = evoked.get_data()
+
+    # also check dimensions of evoked data
+    print("VIEW ON EVOKED DATA", evoked_data.shape)
+
+    ## hard coding stuff is never a good idea!
+    n_params = 7 if osc else 3
+
+    # pre-allocate numpy array of right size
+    acf_array = np.zeros((32, n_params))
+    rsq = np.zeros(32)
+
+    ## then fit a timescale object for each individual channel
+    for ch in range(acf_array.shape[0]):
+
+        # initialize acf object
+        acf = ACF()
+
+        # compute autocorrelation
+        acf.compute_acf(evoked_data[ch][:], fs = evoked.info["sfreq"])
+
+        # fit function
+        if osc:
+            acf.fit(with_cos=True)
+        else:
+            acf.fit()
+
+        # print some output values
+        print("PARAMETER NAMES", acf.param_names)
+        print("ACF FIT PARAMETERS", acf.params) 
+        
+        # print model r-squared values
+        print("ACF EXPLAINED VARIANCE (RSQ)", acf.rsq)
+
+        acf_array[ch] = acf.params
+        rsq[ch] = acf.rsq
+
+        # TODO: I think it also makes sense to save the parameter names
+
+        # Plotting (think about moving this outside of the function!)
+        fig, ax = plt.subplots()
+
+        acf.plot(ax=ax, title=f'TIME DOMAIN FIT FOR CHANNEL:{ch}')
+
+        fig.savefig(os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f"sub-{sub}-ch-{ch}.png"))
+
+        plt.close(fig)
+
+    print(acf_array)
+
+    return acf_array, rsq
+
+
+
+## COMPUTE PSD
 def compute_psd(sub, epochs, events_of_interest):
 
     print(f"\nCOMPUTE PSD FOR EPOCHS OF INTEREST FOR SUB-{sub}\n")
@@ -127,7 +212,7 @@ def compute_psd(sub, epochs, events_of_interest):
     epochs = epochs[events_of_interest]
 
     # for sake of sanity check
-    print("# OF EPOCHS TO COMPUTE PSD ON", len(epochs))
+    # print("# OF EPOCHS TO COMPUTE PSD ON", len(epochs))
 
     # compute spectrum object
     psd = epochs.average().compute_psd(fmin = 2, fmax = 30)
@@ -139,8 +224,8 @@ def compute_psd(sub, epochs, events_of_interest):
     return power, freqs
 
 
-
-def timescales_average_trials(sub, freqs, power):
+## PSD timescale fits
+def timescales_psd_evoked(sub, freqs, power):
         # load the epoched data
         epochs_fname = f'sub-{sub}-epo.fif'
         epochs = mne.read_epochs(os.path.join(DERIV_DIR, "epochs", epochs_fname), preload=True)
@@ -160,7 +245,6 @@ def timescales_average_trials(sub, freqs, power):
         timescales_tau_list = []
 
         # use pre-allocation of numpy array
-        
         for ch_idx, ch_name in enumerate(ch_names):
 
             #Compute PSD fit
@@ -176,8 +260,7 @@ def timescales_average_trials(sub, freqs, power):
             psd_timescales = psd_fix.tau
             timescales_tau_list.append(psd_timescales)
 
-        
-        ## save timescale parameters to list - unit: seconds
+        ## save timescale parameters to list 
         print(timescales_tau_list)
         print(len(timescales_tau_list)) # >> returns list with 32 entries of type np.float , so 1 timescale per channel (because its averaged over the epochs)
 
@@ -193,23 +276,47 @@ def timescales_average_trials(sub, freqs, power):
         # this plot depicts average tau for the all of the fixation periods 
         mne.viz.plot_topomap(data = timescales_tau_array, pos = epochs.info, cmap = 'viridis')
 
+## FIXME!!
+def timescales_psd_evoked_np(sub, epochs, freqs, power):
 
-# def visualize_tau(timescales_tau_array):
-#      mne.viz.plot_topomap(data = timescales_tau_array, pos = epochs_eeg.info, cmap = 'viridis')
+        # get channel names
+        ch_names = epochs.info['ch_names']
+
+        print("THESE ARE THE CHANNEL NAMES: ", ch_names)
+        print("THESE ARE THE CHANNEL NAME SHAPE: ", len(ch_names))
+        
+
+        # TODO: Initialize numpy arrays that are of the right size to store the parameter estimates
+        model_array = np.zeros(len(ch_names))
+        # timescales_psd_array = np.zeros()
+        
+        for ch_idx, ch_name in enumerate(ch_names):
+
+            # Compute PSD fit
+            psd_fixation = PSD()
+
+            psd_fixation = PSD(freqs, power[ch_idx])
+
+            psd_fixation.fit(method='huber')
+            
+            model_array[ch_idx] = psd_fixation.tau
+
+            # save the parameters
+            # psd_timescales = psd_fixation.tau
+    
+        print(model_array)
 
 
 
-def timescales_enc_ret(sub, epochs, events):
+def timescales_enc_ret(sub, epochs):
     """Compute timescales separately for encoding vs. retrieval phase (using PSD fit)."""
-
-    # TODO: first evaluate PSD fit (check rsquared!)
 
     # select epochs from enc and retrieval phase
     # in this implementation the epochs need to be already loaded (and epochs object needs to be passed as argument to the function)
     epochs_enc = epochs['Fixation Onset Enc']
     epochs_ret = epochs['Fixation Onset Ret']
 
-    # Sanity check - print the length of these 
+    # Sanity check
     print("# OF ENCODING EPOCHS:", len(epochs_enc))
     
     print("# OF RETENTION EPOCHS:", len(epochs_ret))
@@ -251,7 +358,7 @@ def timescales_enc_ret(sub, epochs, events):
         r2_enc_list.append(r2_enc)
 
         
-    ## save timescale parameters to list - unit: seconds
+    ## save timescale parameters to list 
     print(tau_enc_list)
     print(len(tau_enc_list)) # >> returns list with 32 entries of type np.float , so 1 timescale per channel (because its averaged over the epochs)
 
@@ -266,7 +373,6 @@ def timescales_enc_ret(sub, epochs, events):
     np.savetxt(
     os.path.join(DERIV_DIR, 'timescales', 'arrays', f'Sub-{sub}_timescales_fooof_encoding.txt'),
     timescales_enc_array)
-
 
 
     ## RETRIEVAL PHASE
@@ -328,8 +434,6 @@ def timescales_enc_ret(sub, epochs, events):
 
 def timescales_single_trials(sub):
 
-    # TODO: implement selection of epochs following or preceeding certain markers
-
     """ Computes psd for each epoch x channel pair.
 
     Returns a list of timescale.fit.psd.PSD objects of length (n_epochs x n_channels)
@@ -386,9 +490,7 @@ def timescales_single_trials(sub):
 
 
 
-
 ## TIMESCALE ESTIMATION IN TIME DOMAIN - USING ACF OBJECTS
-
 def timescales_acf(sub, epochs, events_of_interest):
     """Compute Timescales from the time-domain representation of epochs.
      can be fit with or without an oscillatory component - this is something I need to check again."""
@@ -437,8 +539,7 @@ def timescales_acf(sub, epochs, events_of_interest):
 
 
 
-
-## Plotting functions
+## PLOTTING FUNCTIONS
 def plot_aperiodic_power(sub, freqs, power):
 
     epochs_fname = f'sub-{sub}-epo.fif'
@@ -489,6 +590,12 @@ def plot_acf(sub, power, freqs):
 
         fig.savefig(os.path.join(DERIV_DIR, 'timescales', f"sub-{sub}_acf_fix_ch-{ch_name}.png"))
         plt.close(fig)
+
+
+
+# def visualize_tau(timescales_tau_array):
+#      mne.viz.plot_topomap(data = timescales_tau_array, pos = epochs_eeg.info, cmap = 'viridis')
+
 
 
 
