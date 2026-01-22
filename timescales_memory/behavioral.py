@@ -11,7 +11,7 @@ import pandas as pd
 # import variables and paths
 from timescales_memory.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
 
-# define helper functions
+
 def read_behav_data(sub, phase):
     """Reads the .xlsx files for each subject as pd DataFrame.
     """
@@ -23,7 +23,6 @@ def read_behav_data(sub, phase):
     else: 
         raise ValueError("This is not a valid experimental phase, please specify either 'enc' or 'ret'")
     
-
 
 def process_enc_data(sub, data):
     """Excludes NaN values, and adds columns for correct encoding."""
@@ -70,7 +69,7 @@ def process_enc_data(sub, data):
     # drop NA values
     data = data.dropna()
 
-    data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', f'Enc_{sub}_processed.csv'), sep = ',', header = True, index = False)
+    data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', 'processed', f'sub-{sub}-enc_processed.csv'), sep = ',', header = True, index = False)
 
     return data 
 
@@ -142,12 +141,12 @@ def process_ret_data(sub, data):
     data = data.drop(columns = ['Gender',  'Edu', 'TrialNr'])
 
     # save data as new csv file
-    data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', f'Ret_{sub}_processed.csv'), sep = ',', header = True, index = False)
+    data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', 'processed', f'sub-{sub}-ret_processed.csv'), sep = ',', header = True, index = False)
  
     return data
 
 
-def encoding_accuracy(data):
+def calculate_encoding_accuracy(data):
     """Computes count of correctly encoded pictures during encoding phase.
     """
     count_correct = (data['Enc_accuracy'] == 'correct').sum()
@@ -159,24 +158,31 @@ def encoding_accuracy(data):
     return count_correct / count_total
 
 
+# FIXME!  I need to divide by the len(misses) and for the trial wise hitrate by the total number of possible
+# observation (e.g. for hitrate_lowdist = hits_low_dist / hits_low_dist + miss_low_dist)
 def calculate_hitrate(data, trial_wise = False):
 
     """Calculate hitrate, by taking the ratio of number 
-    of correct responses and number of total responses.
+    of correct responses and number of total responses (or the misses??)
     """
-
-    if trial_wise == True:
-
-        #  hits for low distraction targets
-        hits_low_dist = data[data['hit_category'].str.contains('hit_low_dist_tar')]
+    
+    misses = data[data['hit_category'].str.contains('miss')]
         
-        # hits for high distraction targets
+    if trial_wise:
+        
+        #  hits & misses for low distraction targets
+        hits_low_dist = data[data['hit_category'].str.contains('hit_low_dist_tar')]
+        miss_low_dist = data[data['hit_category'].str.contains('miss_low_dist_tar')]
+        
+        # hits & misses for high distraction targets
         hits_high_dist = data[data['hit_category'].str.contains('hit_high_dist_tar')]
+        miss_high_dist = data[data['hit_category'].str.contains('miss_high_dist_tar')]
 
-        # hits for distractors
+        # hits & misses for distractors
         hits_distractor = data[data['hit_category'].str.contains('hit_distractor')]
+        miss_distractor = data[data['hit_category'].str.contains('miss_distractor')]
 
-        return (len(hits_low_dist) / len(data)), (len(hits_high_dist) / len(data)), (len(hits_distractor) / len(data))
+        return (len(hits_low_dist) / (len(hits_low_dist) + len(miss_low_dist))), (len(hits_high_dist) / (len(hits_high_dist) + len(miss_high_dist))), (len(hits_distractor) / (len(hits_distractor) + len(miss_distractor)))
     
     else:
 
@@ -184,28 +190,29 @@ def calculate_hitrate(data, trial_wise = False):
 
         # number of observations
         print('# OF HITS:', len(hits))
+        print('# OF MISSES', len(misses))
         print('# OF OBSERVATIONS', len(data))
 
-        # return a ratio, aka hitrate 
-        return (len(hits) / len(data))
+        return (len(hits) / (len(hits) + len(misses)))
 
 
-# FIXME: check if implementation is correct!!
+
 def calculate_fa_rate(data): 
     """Calculate FA Rate: False Positives / (False Positives + True Negatives).
     """
     # define false positives
-    false_positives = data[data['hit_category'].str.contains('false_alarms')]
+    false_positives = data[data['hit_category'] == 'false_alarms']
 
-    print(len(false_positives))
+    print('LENGTH FALSE POSITIVES', len(false_positives))
 
-    # define true negatives - I think something with the definition went wrong
-    true_negatives = data[data['hit_category'].str.contains('correct_new')]
+    # define true negatives 
+    true_negatives = data[data['hit_category'] == 'correct_new']
 
-    print(len(true_negatives)) 
+    print('LENGTH TRUE NEGATIVES', len(true_negatives)) 
 
     # return false alarm rate
     return len(false_positives) / (len(false_positives) + len(true_negatives))
+
 
 
 # TODO: Check if this is actually correct 
@@ -214,9 +221,6 @@ def calculate_d_prime(hitrate, fa_rate):
     # standardize hitrate & false alarm rate
     z_score_hitrate = scipy.stats.norm.ppf(hitrate)
     z_score_farate = scipy.stats.norm.ppf(fa_rate)
-
-    print(z_score_hitrate)
-    print(z_score_farate)
 
     return (z_score_hitrate - z_score_farate)
 
@@ -230,24 +234,52 @@ def classify_age(data):
         return 'young'
 
 
-def create_behavioral_summary(data):
+def create_behavioral_summary(sub, data_enc, data_ret):
+    """Creates a summary pd.DataFrame of the behavioral data, 
+    including: Sub-ID, Age, Encoding Accuracy & Memory Performance (D' metrics).
 
-    Sub_ID = data['ID'][0]
+    Args:
+        sub (_type_): _description_
+        data (_type_): _description_
+    """
 
-    Age = classify_age(data)
+    Sub_ID = sub 
 
-    Enc_Accuracy = encoding_accuracy(data)
-    print(Enc_Accuracy)
+    Age = classify_age(data_enc)
+
+    Enc_Accuracy = calculate_encoding_accuracy(data_enc)
+
+    # calculate false alarm rate
+    farate = calculate_fa_rate(data_ret)
+
+    # calculate hitrates
+    hitrate_global = calculate_hitrate(data_ret)
+    hitrate_low, hitrate_high, hitrate_dist = calculate_hitrate(data_ret, trial_wise=True)
+
+    # calculate both global and local memory performance
+    D_Prime_Global = calculate_d_prime(hitrate=hitrate_global, fa_rate=farate)
+    D_Prime_Low = calculate_d_prime(hitrate=hitrate_low, fa_rate=farate)
+    D_Prime_High = calculate_d_prime(hitrate=hitrate_high, fa_rate=farate)
+    D_Prime_Dist = calculate_d_prime(hitrate=hitrate_dist, fa_rate=farate)
+    D_Prime_Targets_Avg = (D_Prime_High + D_Prime_Low) / 2 # d prime averaged over low and high distractor targets
 
     df = pd.DataFrame({
     'ID': [Sub_ID],
     'AGE': [Age],
-    'ENCODING ACCURACY': [Enc_Accuracy]
+    'ENC_ACCURACY': [Enc_Accuracy],
+    'D_PRIME_GLOBAL': [D_Prime_Global],
+    'D_PRIME_HighDist': [D_Prime_High],
+    'D_PRIME_LowDist': [D_Prime_Low],
+    'D_PRIME_Dist': [D_Prime_Dist],
+    'D_PRIME_TARGETS': [D_Prime_Targets_Avg]
+
 })
     print(df)
-    # TODO: replace index column by subject ID columm
-    ## add columns for memory performance (d') global and local measures
-    ## also add RT from Retrieval Phase!
+
+    # save pandas dataframe to file
+    df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral','summary_stats', f'sub-{sub}_summary.csv'), sep = ',', header = True, index = False)
+
+    return df
 
 
 def main():
@@ -271,27 +303,8 @@ def main():
     assert data_enc['Enc_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
     assert data_ret['Ret_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
 
-    hitrate_low, hitrate_high, hit_rate_dist = calculate_hitrate(data_ret, trial_wise=True)
-    farate = calculate_fa_rate(data_ret)
-
-    print('THIS IS THE HITRATE:', hitrate_low, hitrate_high, hit_rate_dist)
-
-    print("THIS IS THE FALSE ALARM RATE:", farate)
-
-    d_prime_low = calculate_d_prime(hitrate_low, farate)
-    
-    print("THIS IS D PRIME LOW", d_prime_low)
-    
-    age = classify_age(data_enc)
-
-    print('AGE CATEGORY:', age)
-
-    enc_acc = encoding_accuracy(data_enc)
-
-    print('ENCODING ACCURACY:', enc_acc)
-
-    create_behavioral_summary(data=data_enc)
-
+    print('\nCREATING BEHAVIORAL SUMMARY\n')
+    create_behavioral_summary(sub=param1, data_enc=data_enc, data_ret=data_ret)
 
 
 if __name__ == "__main__":
