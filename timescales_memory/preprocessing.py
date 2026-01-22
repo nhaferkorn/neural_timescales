@@ -158,7 +158,8 @@ def annotate_bad_spans(sub, raw):
     start_end_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "annotations", f"{sub}-start_end_annotations.fif"))
 
     # read annotations of bad spans
-    bad_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "annotations", f"{sub}-bad_annotations.fif"))
+    if os.path.exists(os.path.join(DERIV_DIR, "annotations", f"{sub}-bad_annotations.fif")):
+        bad_annotations = mne.read_annotations(os.path.join(DERIV_DIR, "annotations", f"{sub}-bad_annotations.fif"))
 
     # check whether bad annotations file already exists 
     if os.path.exists(os.path.join(DERIV_DIR, "annotations", f"{sub}-bad_annotations.fif")):
@@ -215,12 +216,17 @@ def add_bad_channels(sub, raw):
 
     bad_chs = [ch.strip() for ch in bad_chs.split(',')]
 
+    
+    # TODO: save bad channels in raw info object & also as list for each subject
+    with open(os.path.join(DERIV_DIR, 'annotations', f'{sub}_bad_chs'), 'wb') as fp:
+        pickle.dump(bad_chs, fp)
+
     raw.info['bads'] = bad_chs
 
     print(raw.info['bads'])
 
-    # TODO: save bad channels in raw info object
-    # TODO: also check how they mark bad channels in MNE-Python 
+    # check type
+    print('TYPE BAD ', type(raw.info['bads']))
 
     return raw 
 
@@ -278,6 +284,9 @@ def apply_ica(sub, raw):
             with open(os.path.join(DERIV_DIR, 'ica', f'{sub}_components'), 'rb') as fp:
                 components_loaded = pickle.load(fp)
 
+
+        with open(os.path.join(DERIV_DIR, 'ica', f'{sub}_components'), 'rb') as fp:
+            components_loaded = pickle.load(fp)
         print("\nLOADED THE FOLLOWING COMPONENTS:", components_loaded, "\n")
             
         # select which components to exclude
@@ -285,6 +294,10 @@ def apply_ica(sub, raw):
 
         # ica.apply changes raw object in-place, so let's make a copy first
         ## FIXME: look into if I should apply ICA to the raw_ica_filtered data or the raw data directly!!
+
+        ## MNE DOCUMENTATION: However, because filtering is a linear operation, the ICA solution found from the filtered signal 
+        # can be applied to the unfiltered signal (see [2] for more information), so we’ll keep a copy of 
+        # the unfiltered Raw object around so we can apply the ICA solution to it later.
         reconst_raw = raw.copy()
         ica.apply(reconst_raw)
 
@@ -297,6 +310,5 @@ def apply_ica(sub, raw):
         # think about adding a date to the file name
         reconst_raw.save(os.path.join(RAW_CLEANED, reconst_fname))
     
-
 if __name__ == "__main__":
     pass
