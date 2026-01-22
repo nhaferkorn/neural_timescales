@@ -18,10 +18,10 @@ param1 = sys.argv[1]
 raw, events = preprocessing(sub=param1)
 
 # annotate rest periods
-# raw = annotate_rest(raw, events = events, sub = param1)
+raw = annotate_rest(raw, events = events, sub = param1)
 
 # # annotate bad spans
-# raw = annotate_bad_spans(sub = param1, raw=raw)
+raw = annotate_bad_spans(sub = param1, raw=raw)
 
 
 # read annotations of rest periods
@@ -43,12 +43,12 @@ raw.set_annotations(rest_annotations + start_end_annotations + bad_annotations)
 print('COUNT', raw.annotations.count())
 
 
+raw_all = add_bad_channels(sub=param1, raw=raw)
 # fit ica
-print('NOW RUNNING ICA')
+# print('NOW RUNNING ICA')
 # fit_ica(sub=param1, raw=raw)
 
-apply_ica(sub=param1, raw = raw)
-
+# apply_ica(sub=param1, raw = raw)
 
 ## Save some of the intermediate ouputs to file to create subjects report
 # include: # picture with components, % of bad annotated segments
