@@ -5,6 +5,7 @@
 *.egg-info
 *.out
 *.ipynb
+*.sh
 
 # Ignore notebook checkpoint files
 *\.ipynb_checkpoints\*
