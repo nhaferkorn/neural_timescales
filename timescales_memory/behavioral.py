@@ -13,9 +13,8 @@ from timescales_memory.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
 
 
 def read_behav_data(sub, phase):
-    """Reads the .xlsx files for each subject as pd DataFrame.
+    """Reads the .xlsx files for each subject as pd.DataFrame.
     """
-
     if phase == 'enc':
         return pd.read_excel(os.path.join(BEHAV_DIR, f"Enc_{sub}.xlsx"),  names = ['ID', 'Gender', 'Age', 'Edu', 'TrialNr', 'Pic_left', 'Pic_right', 'Enc_trialtype', 'Enc_response', 'Enc_RT'])
     elif phase == "ret":
@@ -34,14 +33,14 @@ def process_enc_data(sub, data):
     print('VALUES IN:', data['Enc_trialtype'].value_counts())
     print('VALUES IN:', data['Enc_response'].value_counts())
 
-    # add ground truth label of pictures 
+    # TODO: Double check if thisis correct
+    # add ground truth label of pictures, depending on whether their letter is capitalized
     data['GroundTruth_Left'] = data['Pic_left'].apply(
     lambda x: 'manmade' if x[0].isupper() else 'nature')
 
     data['GroundTruth_Right'] = data['Pic_right'].apply(
     lambda x: 'manmade' if x[0].isupper() else 'nature')
     
-
     # add column to indicate whether target location of trial (i.e. left or right)
     data['Target_Loc'] = data['Enc_trialtype'].apply(
         lambda x: 'left' if (x == 1 or x == 3) else 'right'
@@ -62,6 +61,7 @@ def process_enc_data(sub, data):
 
     ]
 
+    # TODO: double check if this is correct
     values_correct = ['correct', 'correct', 'correct', 'correct']
 
     data['Enc_accuracy'] = np.select(conditions_correct, values_correct,  default='incorrect') 
@@ -108,9 +108,9 @@ def process_ret_data(sub, data):
     ]
 
     # create list of values to assign to each condition
-    # TODO: rename to better names!!
     values = ['hit_low_dist_tar', 'hit_high_dist_tar', 'hit_distractor', 'miss_low_dist_tar', 'miss_high_dist_tar', 'miss_distractor', 'false_alarms', 'correct_new']
 
+    # TODO: double check if this is correct
     # create a new column and use np.select
     data['hit_category'] = np.select(conditions, values,  default=None) # default describes all of the values that are not true
 
@@ -132,7 +132,7 @@ def process_ret_data(sub, data):
 
     values_confidence = ['not_conf_old', 'med_conf_old', 'high_conf_old', 'not_conf_new', 'med_conf_new', 'high_conf_new']
 
-    data['confidence_category'] = np.select(conditions_confidence, values_confidence, default = None) # TODO: check whether None is treates as NaN value
+    data['confidence_category'] = np.select(conditions_confidence, values_confidence, default = None) 
 
     # drop NaN values
     data = data.dropna()
@@ -147,8 +147,9 @@ def process_ret_data(sub, data):
 
 
 def calculate_encoding_accuracy(data):
-    """Computes count of correctly encoded pictures during encoding phase.
+    """Computes count (ratio) of correctly encoded pictures during encoding phase.
     """
+    # be consistent with count and sum method (but I think here its correct); it also very much depends on how I index
     count_correct = (data['Enc_accuracy'] == 'correct').sum()
     count_total = data['Enc_accuracy'].count()
 
@@ -158,15 +159,44 @@ def calculate_encoding_accuracy(data):
     return count_correct / count_total
 
 
-# FIXME!  I need to divide by the len(misses) and for the trial wise hitrate by the total number of possible
-# observation (e.g. for hitrate_lowdist = hits_low_dist / hits_low_dist + miss_low_dist)
+def calculate_retrieval_accuracy(data):
+    """Computes count of correctly remembered pictures during retrieval phase.
+    """
+    count_correct = data['hit_category'].str.contains('hit').sum() 
+    # what is the difference between sum and count attribute? I need to use sum, cause the output is a series of boolean!
+    # see: https://stackoverflow.com/questions/48684192/what-is-the-difference-between-sum-and-count-in-pandas 
+
+    # define true negatives 
+    true_negatives = data['hit_category'].str.contains('correct_new').sum()
+
+    count_correct = count_correct + true_negatives
+                     
+    # no, i need to take only the old pictures as reference
+    misses = data['hit_category'].str.contains('miss').sum()
+
+    # and just for sake of quality calculate total count
+    total_count = data['hit_category'].count()
+    fn_count = data['hit_category'].str.contains('false_alarms').sum()
+
+    print('# CORRECT HITS', count_correct)
+    print('# MISSES', misses)
+    print('# FALSE NEGATIVE', fn_count )
+    print('# TOTAL COUNT', total_count)
+
+    assert count_correct + misses + fn_count == total_count, 'Something does not add up'
+    return count_correct / (misses + count_correct)
+
+
+# TODO: There is still a bug, either in hitrate or fa_rate function, probably sth with the indexing and len(), summing etc-
 def calculate_hitrate(data, trial_wise = False):
 
     """Calculate hitrate, by taking the ratio of number 
-    of correct responses and number of total responses (or the misses??)
+    of correct responses and number of misses + hits.
     """
-    
+    # TODO: not sure if I am computing this correctly - check the type
     misses = data[data['hit_category'].str.contains('miss')]
+    print('TYPE OF MISSES', type(misses)) # pd.DataFrame
+    print('LENGTH OF MISSES', len(misses)) # 30
         
     if trial_wise:
         
@@ -215,9 +245,7 @@ def calculate_fa_rate(data):
 
 
 
-# TODO: Check if this is actually correct 
 def calculate_d_prime(hitrate, fa_rate):
-    
     # standardize hitrate & false alarm rate
     z_score_hitrate = scipy.stats.norm.ppf(hitrate)
     z_score_farate = scipy.stats.norm.ppf(fa_rate)
@@ -226,7 +254,7 @@ def calculate_d_prime(hitrate, fa_rate):
 
 
 def classify_age(data):
-    """Classifies subject as OA or YA."""
+    """Classifies subject as OA (> 40) or YA."""
 
     if (data['Age'] > 40).any():
         return 'old'
@@ -248,6 +276,7 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     Age = classify_age(data_enc)
 
     Enc_Accuracy = calculate_encoding_accuracy(data_enc)
+    ret_accuracy = calculate_retrieval_accuracy(data_ret)
 
     # calculate false alarm rate
     farate = calculate_fa_rate(data_ret)
@@ -267,6 +296,7 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     'ID': [Sub_ID],
     'AGE': [Age],
     'ENC_ACCURACY': [Enc_Accuracy],
+    'RET_ACCURACY': [ret_accuracy],
     'D_PRIME_GLOBAL': [D_Prime_Global],
     'D_PRIME_HighDist': [D_Prime_High],
     'D_PRIME_LowDist': [D_Prime_Low],
@@ -282,30 +312,6 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     return df
 
 
-def main():
-
-    # set system variables
-    param1 = sys.argv[1]
-
-    # print some data for the encoding phase
-    data_encoding = read_behav_data(sub = param1, phase = 'enc')
-    print(type(data_encoding))  # returns Dataframe object
-    print("BEHAVIORAL DATA OF ENCODING PHASE:", data_encoding.head(5))
-
-    # # print behavioral data from retrieval phase
-    data_retrieval = read_behav_data(sub = param1, phase = 'ret')
-    print("BEHAVIORAL DATA FROM RETRIEVAL:", data_retrieval.head(5))
-
-    data_enc = process_enc_data(sub = param1, data=data_encoding)
-    data_ret = process_ret_data(sub = param1, data=read_behav_data(phase='ret', sub=param1))
-
-    ## check whether dropping NAN values has worked
-    assert data_enc['Enc_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
-    assert data_ret['Ret_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
-
-    print('\nCREATING BEHAVIORAL SUMMARY\n')
-    create_behavioral_summary(sub=param1, data_enc=data_enc, data_ret=data_ret)
-
 
 if __name__ == "__main__":
-    main()
+    pass
