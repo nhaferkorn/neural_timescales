@@ -24,7 +24,6 @@ from timescales_memory.analyses import plot_reconst_raw, run_epochs, compute_psd
 # set system variables
 sub = sys.argv[1]
 
-
 # load cleaned data for subject
 print(f"LOADING CLEANED DATA FOR SUB-{sub}\n")
 reconst_fname = f'sub-{sub}-raw_cleaned.fif'
@@ -49,10 +48,8 @@ epochs_crop = epochs.copy().crop(tmin=0.2, tmax=1.1)
 # check bad channels
 print("INFO OBJECT OF EPOCHS CROPPED INFO:", epochs_crop.info["bads"])
 
-
 # exclude bad channels
 chs_cleaned = list(set(epochs_crop.info['ch_names']) - set(epochs_crop.info['bads']))
-
 
 epochs_crop = epochs_crop.copy().pick_channels(chs_cleaned)
 print(epochs_crop.info)
@@ -60,10 +57,11 @@ print(epochs_crop.info)
 # TODO: compute drop log & save that information
 epochs_fix_enc = epochs_crop['Fixation Onset Enc']
 epochs_fix_ret = epochs_crop['Fixation Onset Ret']
+epochs_fix_all = epochs_crop[['Fixation Onset Enc','Fixation Onset Ret']]
+
 
 # # evoked_fix_enc = epochs_fix_enc.average()
 # # evoked_fix_ret = epochs_fix_ret.average()
-
 
 # # # compute grand averages (i.e. average of evoked encoding & retrieval)
 # # grand_average = mne.grand_average([evoked_fix_enc, evoked_fix_ret])
@@ -108,24 +106,21 @@ epochs_fix_ret = epochs_crop['Fixation Onset Ret']
 
 
 # FIT TIMESCALES ON SINGLE TRIALS (NO OSC)
-acf_trials, rsq_trial = timescales_acf_single_trials(sub, epochs = epochs_fix_enc)
-print(acf_trials.shape) # (389, 31, 3)
+acf_trials, rsq_trial = timescales_acf_single_trials(sub, epochs = epochs_fix_all)
+print(acf_trials.shape) # (n_epochs, n_chs, n_params)
 print(rsq_trial.shape)
 
 
-# add channel names & epochs index
+# TODO: add channel names & epochs index
 
 
 
 # reshape into 2D array
-acf_trials_reshaped = acf_trials.reshape(31 * 389, 3)
+# acf_trials_reshaped = acf_trials.reshape(31 * 389, 3)
+acf_trials_reshaped = acf_trials.reshape(acf_trials.shape[1] * acf_trials.shape[0], 3)
 print(acf_trials_reshaped.shape)
 
 print(acf_trials_reshaped)
-
-
-# TODO: ideally I would also add a column with the trial number!
-
 
 ## Alternatively - use concept of 3D pandas dataframe
 # Convert the numpy array into a pandas DataFrame - no, this doesn't really
@@ -137,35 +132,29 @@ print(acf_trials_reshaped)
 
 
 # # convert to pd.DataFrame
-df_trials = pd.DataFrame(acf_trials_reshaped, columns = ["tau", "height", "offset"])
+df_trials = pd.DataFrame(acf_trials_reshaped, columns = ["tau_trial_all", "height", "offset"])
 
 # add channel names
 df_trials['chs'] = np.tile(epochs_fix_enc.info['ch_names'], acf_trials.shape[0])
 
+# add mean tau
+df_trials['tau_trial_all_mean'] = df_trials['tau_trial_all'].mean()
 
 # # add explained variance per channel
 # df_trials['rsq'] = rsq_trial 
 
-# df_trials['sub'] = sub 
-
-
+df_trials['sub'] = sub 
 print(df_trials.head(50))
 
 # save as csv file
-# df_osc.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_evoked_enc.csv'), sep = ',', header = True, index = False)
+df_trials.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials',  f'sub-{sub}_acf_params_single_trials_all.csv'), sep = ',', header = True, index = False)
 
 
 
-# # subsetting epochs object - okay so this does seem to work
-# # but I need to find criterion that is empirically motivated!
+# subsetting epochs object 
 # epochs_firstthird = epochs_fix_enc_cropped[0:130]
 # epochs_secondthird = epochs_fix_enc_cropped[130:260]
 # epochs_thirdthird = epochs_fix_enc_cropped[260:]
-
-# print("LENGTH EPOCHS FIRST THIRD", len(epochs_firstthird)) # 130
-# print("LENGTH EPOCHS SECOND THIRD", len(epochs_secondthird)) # 130
-# print("LENGTH EPOCHS FINAL THIRD", len(epochs_thirdthird)) # 129
-
 # ####### Check if Timescales change across the epochs (but not sure if it makes sense to compute them on very short segments)
 # # crop epochs into three segments 
 # epochs_seg1 = epochs.copy().crop(tmin=0, tmax=0.3)
