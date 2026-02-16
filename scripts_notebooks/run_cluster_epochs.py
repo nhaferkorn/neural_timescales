@@ -45,6 +45,8 @@ epochs_high_dist = mne.Epochs(reconst_raw, events = events, event_id = event_hig
 epochs_low_dist = mne.Epochs(reconst_raw, events = events, event_id = event_low_dist, tmin = 0, tmax=2.5, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
 
 
+
+
 # print len of epochs
 print('# of high dist epochs', len(epochs_high_dist))
 print('# of low dist epochs', len(epochs_low_dist))
@@ -73,7 +75,7 @@ epochs_low_dist_crop = epochs_low_dist.copy().crop(tmin=1, tmax=2.1)
 print("INFO OBJECT OF HIGH DIST EPOCHS CROPPED INFO:", epochs_high_dist_crop.info["bads"])
 
 
-# # exclude bad channels
+# exclude bad channels
 chs_cleaned = list(set(epochs_high_dist_crop.info['ch_names']) - set(epochs_high_dist_crop.info['bads']))
 
 epochs_highdist = epochs_high_dist_crop.copy().pick_channels(chs_cleaned)
@@ -81,6 +83,8 @@ epochs_lowdist = epochs_low_dist_crop.copy().pick_channels(chs_cleaned)
 
 print("INFO OBJECT epochs_highdist", epochs_highdist.info)
 
+# also save the epochs info object for that subject
+epochs_highdist.info.save(fname = os.path.join(DERIV_DIR,'info', f'sub-{sub}_info.fif'))
 
 ###########################################################################################
 evoked_fix_highdist = epochs_highdist.average()
@@ -88,6 +92,7 @@ evoked_fix_lowdist = epochs_lowdist.average()
 
 ## FIT TIMESCALES ON EVOKED OBJECTS (NO OSC) - HIGH DISTRACTION TRIALS
 acf_fitted_high, rsq_fitted_high = timescales_acf_evoked_np(sub, evoked_fix_highdist, osc = False)  
+
 
 # convert to pd.DataFrame
 df_high = pd.DataFrame(acf_fitted_high, columns = ["tau_high", "height_high", "offset_high"])
