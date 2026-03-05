@@ -33,7 +33,7 @@ def process_enc_data(sub, data):
     print('VALUES IN:', data['Enc_trialtype'].value_counts())
     print('VALUES IN:', data['Enc_response'].value_counts())
 
-    # TODO: Double check if thisis correct
+    # TODO: Double check if this is correct
     # add ground truth label of pictures, depending on whether their letter is capitalized
     data['GroundTruth_Left'] = data['Pic_left'].apply(
     lambda x: 'manmade' if x[0].isupper() else 'nature')
@@ -150,22 +150,30 @@ def calculate_encoding_accuracy(data):
     """Computes count (ratio) of correctly encoded pictures during encoding phase.
     """
     # be consistent with count and sum method (but I think here its correct); it also very much depends on how I index
-    count_correct = (data['Enc_accuracy'] == 'correct').sum()
+    count_correct1 = (data['Enc_accuracy'] == 'correct').sum()
+
+    count_correct2 = len(data[data['Enc_accuracy'] == 'correct'])
+
+    assert count_correct1 == count_correct2 ## yess, that's the same thing!
+
     count_total = data['Enc_accuracy'].count()
 
-    print('# CORRECT', count_correct)
+    print('# CORRECT 1 ', count_correct1)
+    print('# CORRECT 2 ', count_correct2)
     print('# TOTAL', count_total)
 
-    return count_correct / count_total
+    return count_correct1 / count_total
+
+# what is the difference between sum and count attribute? I need to use sum, cause the output is a series of boolean!
+# see: https://stackoverflow.com/questions/48684192/what-is-the-difference-between-sum-and-count-in-pandas 
+
 
 
 def calculate_retrieval_accuracy(data):
     """Computes count of correctly remembered pictures during retrieval phase.
     """
     count_correct = data['hit_category'].str.contains('hit').sum() 
-    # what is the difference between sum and count attribute? I need to use sum, cause the output is a series of boolean!
-    # see: https://stackoverflow.com/questions/48684192/what-is-the-difference-between-sum-and-count-in-pandas 
-
+  
     # define true negatives 
     true_negatives = data['hit_category'].str.contains('correct_new').sum()
 
@@ -178,73 +186,98 @@ def calculate_retrieval_accuracy(data):
     total_count = data['hit_category'].count()
     fn_count = data['hit_category'].str.contains('false_alarms').sum()
 
-    print('# CORRECT HITS', count_correct)
-    print('# MISSES', misses)
-    print('# FALSE NEGATIVE', fn_count )
-    print('# TOTAL COUNT', total_count)
+    # print('# CORRECT HITS', count_correct)
+    # print('# MISSES', misses)
+    # print('# FALSE NEGATIVE', fn_count )
+    # print('# TOTAL COUNT', total_count)
 
     assert count_correct + misses + fn_count == total_count, 'Something does not add up'
+
+
     return count_correct / (misses + count_correct)
 
 
-# TODO: There is still a bug, either in hitrate or fa_rate function, probably sth with the indexing and len(), summing etc-
+
+
 def calculate_hitrate(data, trial_wise = False):
 
     """Calculate hitrate, by taking the ratio of number 
     of correct responses and number of misses + hits.
     """
-    # TODO: not sure if I am computing this correctly - check the type
-    misses = data[data['hit_category'].str.contains('miss')]
-    print('TYPE OF MISSES', type(misses)) # pd.DataFrame
-    print('LENGTH OF MISSES', len(misses)) # 30
+
+    misses_count = data['hit_category'].str.contains('miss').sum()
+    
+    hits_count = data['hit_category'].str.contains('hit').sum()
+
+    # number of observations
+    print('# OF HITS:', hits_count)
+    print('# OF MISSES', misses_count)
+    print('# OF OBSERVATIONS', len(data))
         
     if trial_wise:
         
         #  hits & misses for low distraction targets
-        hits_low_dist = data[data['hit_category'].str.contains('hit_low_dist_tar')]
-        miss_low_dist = data[data['hit_category'].str.contains('miss_low_dist_tar')]
+        hits_low_dist = data['hit_category'].str.contains('hit_low_dist_tar').sum()
+        miss_low_dist = data['hit_category'].str.contains('miss_low_dist_tar').sum()
         
         # hits & misses for high distraction targets
-        hits_high_dist = data[data['hit_category'].str.contains('hit_high_dist_tar')]
-        miss_high_dist = data[data['hit_category'].str.contains('miss_high_dist_tar')]
+        hits_high_dist = data['hit_category'].str.contains('hit_high_dist_tar').sum()
+        miss_high_dist = data['hit_category'].str.contains('miss_high_dist_tar').sum()
 
         # hits & misses for distractors
-        hits_distractor = data[data['hit_category'].str.contains('hit_distractor')]
-        miss_distractor = data[data['hit_category'].str.contains('miss_distractor')]
+        hits_distractor = data['hit_category'].str.contains('hit_distractor').sum()
+        miss_distractor = data['hit_category'].str.contains('miss_distractor').sum()
 
-        return (len(hits_low_dist) / (len(hits_low_dist) + len(miss_low_dist))), (len(hits_high_dist) / (len(hits_high_dist) + len(miss_high_dist))), (len(hits_distractor) / (len(hits_distractor) + len(miss_distractor)))
+        assert (hits_low_dist + hits_high_dist + hits_distractor) == hits_count
+
+        return (hits_low_dist / (hits_low_dist + miss_low_dist)), (hits_high_dist / (hits_high_dist + miss_high_dist)), (hits_distractor / (hits_distractor  + miss_distractor))
     
     else:
 
-        hits = data[data['hit_category'].str.contains('hit')]
-
-        # number of observations
-        print('# OF HITS:', len(hits))
-        print('# OF MISSES', len(misses))
-        print('# OF OBSERVATIONS', len(data))
-
-        return (len(hits) / (len(hits) + len(misses)))
+        return (hits_count / (hits_count + misses_count))
 
 
 
+
+
+# def calculate_fa_rate(data): 
+#     """Calculate FA Rate: False Positives / (False Positives + True Negatives).
+#     """
+#     # define false positives
+#     false_positives = data[data['hit_category'] == 'false_alarms']
+
+#     print('LENGTH FALSE POSITIVES', len(false_positives))
+
+#     # define true negatives 
+#     true_negatives = data[data['hit_category'] == 'correct_new']
+
+#     print('LENGTH TRUE NEGATIVES', len(true_negatives)) 
+
+#     # return false alarm rate
+#     return len(false_positives) / (len(false_positives) + len(true_negatives))
+
+
+
+# TODO: check if I am actually computing the correct ratio...
 def calculate_fa_rate(data): 
-    """Calculate FA Rate: False Positives / (False Positives + True Negatives).
+    """Calculate FA Rate: False Positives / (False Positives + True Negatives). 
     """
     # define false positives
-    false_positives = data[data['hit_category'] == 'false_alarms']
+    false_positives = data['hit_category'].str.contains('false_alarms').sum()
 
-    print('LENGTH FALSE POSITIVES', len(false_positives))
+    print('# FALSE POSITIVES', false_positives)
 
     # define true negatives 
-    true_negatives = data[data['hit_category'] == 'correct_new']
+    true_negatives = data['hit_category'].str.contains('correct_new').sum()
 
-    print('LENGTH TRUE NEGATIVES', len(true_negatives)) 
+    print('# TRUE NEGATIVES', true_negatives)
 
     # return false alarm rate
-    return len(false_positives) / (len(false_positives) + len(true_negatives))
+    return false_positives / (false_positives + true_negatives)
 
 
 
+# FIXME: there is still something wrong with how I calculate the hitrate!
 def calculate_d_prime(hitrate, fa_rate):
     # standardize hitrate & false alarm rate
     z_score_hitrate = scipy.stats.norm.ppf(hitrate)
@@ -292,16 +325,23 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     D_Prime_Dist = calculate_d_prime(hitrate=hitrate_dist, fa_rate=farate)
     D_Prime_Targets_Avg = (D_Prime_High + D_Prime_Low) / 2 # d prime averaged over low and high distractor targets
 
+    # calculate mean reaction time for enc and ret data
+    mean_RT_enc = data_enc['Enc_RT'].mean()
+    mean_RT_ret = data_ret['Ret_RT'].mean()
+
+
     df = pd.DataFrame({
-    'ID': [Sub_ID],
-    'AGE': [Age],
-    'ENC_ACCURACY': [Enc_Accuracy],
-    'RET_ACCURACY': [ret_accuracy],
-    'D_PRIME_GLOBAL': [D_Prime_Global],
-    'D_PRIME_HighDist': [D_Prime_High],
-    'D_PRIME_LowDist': [D_Prime_Low],
-    'D_PRIME_Dist': [D_Prime_Dist],
-    'D_PRIME_TARGETS': [D_Prime_Targets_Avg]
+    'sub': [Sub_ID],
+    'age': [Age],
+    'enc_accuracy': [Enc_Accuracy],
+    'ret_accuracy': [ret_accuracy],
+    'd_prime_global': [D_Prime_Global],
+    'd_prime_highdist': [D_Prime_High],
+    'd_prime_lowdist': [D_Prime_Low],
+    'd_prime_distractors': [D_Prime_Dist],
+    'd_prime_targets': [D_Prime_Targets_Avg],
+    'RT_enc_mean': [mean_RT_enc],
+    'RT_ret_mean': [mean_RT_ret]
 
 })
     print(df)

@@ -1,4 +1,4 @@
-"""Set up of all experimental variables and Paths."""
+"""Set up of all experimental variables and paths."""
 
 import os
 import re
@@ -11,12 +11,9 @@ EEG_DIR = os.path.join(DATA_DIR,  'eeg')
 BEHAV_DIR = os.path.join(DATA_DIR,  'behavioral')
 DERIV_DIR = os.path.join(PROJECT_DIR, "derivatives")
 EPOCHS_DIR = os.path.join(DERIV_DIR, "epochs")
-RAW_CLEANED = os.path.join(DERIV_DIR, "raw_cleaned") # make sure if this works
-
+RAW_CLEANED = os.path.join(DERIV_DIR, "raw_cleaned") 
 
 # Set up experimental variables
-TASK = "dseeg"
-
 
 DESCRIPTION = ['Misc_Offset', 'Start Practice Trial',
 'Start Encoding', 'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 
@@ -34,7 +31,7 @@ DESCRIPTION = ['Misc_Offset', 'Start Practice Trial',
 '2/3 Left', '2/3 Right']
 
 
-# not sure about the 65536 value - ask Britta
+# not sure about the 65536 value
 ORIGINAL_MARKER = [65536, 99,
 10,21,22,
 23,24,
@@ -79,9 +76,8 @@ EVENT_DICT_CLEAN = dict(zip(['Start Practice Trial',
     ))
 
 
-
 # keys of all the events of interest 
-keys = {'Start Practice Trial',
+keys = ['Start Practice Trial',
     'Start Encoding','Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
     ,'Fixation Onset Enc', 'Cue Onset', 
     'Response Natural', 'Response Manmade', 'Response None Enc',
@@ -91,7 +87,7 @@ keys = {'Start Practice Trial',
     'Retrieval Stimulus Onset Distraction Right Distractor', 'Retrieval Stimulus Onset Distraction Left Distractor',
     'Retrieval Stimulus Onset New', 'Response Old', 'Response New', 'Response None ON',
     'Confidence Onset', 'Response Confidence 1', 'Response Confidence 2', 'Response Confidence 3', 'Response Confidence None',
-    'Fixation Onset Ret', 'End Retrieval'}
+    'Fixation Onset Ret', 'End Retrieval']
 
 
 events_of_interest = {k: EVENT_DICT[k] for k in keys}
