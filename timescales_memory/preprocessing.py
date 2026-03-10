@@ -1,5 +1,6 @@
 """This script pre-processes the raw EEG data."""
 
+# make imports
 import os
 import sys
 import numpy as np
@@ -207,7 +208,6 @@ def annotate_bad_spans(sub, raw):
         return raw
 
 
-
 def add_bad_channels(sub, raw):
     # ask user for input which electrodes are bad and save those!
     print(raw.info['bads'])
@@ -254,7 +254,6 @@ def fit_ica(sub, raw):
         fig_sources = ica.plot_sources(raw_ica_filtered, title=f"AFTER: ICs Timecourses for Sub-{sub}", show_scrollbars=False) 
         fig_components = ica.plot_components(title=f"ICs for Sub-{sub}")
         fig_components.savefig(os.path.join(DERIV_DIR, "ica", f'{sub}_ics.png'))
-
 
 
 def apply_ica(sub, raw):
