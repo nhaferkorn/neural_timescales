@@ -1,4 +1,4 @@
-"""This script splits the encoding trials into left and right high and low distraction trials. """
+"""This script splits the encoding trials into left and right high and low distraction trials."""
 
 # make imports 
 import os

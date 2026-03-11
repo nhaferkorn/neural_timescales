@@ -14,7 +14,6 @@ from statsmodels.tsa.stattools import acf as compute_acf
 from timescales.fit import ARPSD, PSD, ACF
 
 
-
 # import variables and paths
 from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED, EPOCHS_DIR, events_of_interest
 

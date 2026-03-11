@@ -10,7 +10,6 @@ import pandas as pd
 # import paths
 from timescales_memory.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
 
-
 def read_behav_data(sub, phase):
     """Reads the .xlsx files for each subject as pd.DataFrame.
     """
