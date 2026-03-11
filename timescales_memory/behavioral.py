@@ -1,5 +1,4 @@
-"""This script analyses the reaction time data and computes memory performance metrics.
-"""
+"""This script analyses the reaction time data and computes memory performance metrics."""
 
 # make imports
 import sys
@@ -8,7 +7,7 @@ import scipy
 import numpy as np
 import pandas as pd
 
-# import variables and paths
+# import paths
 from timescales_memory.settings import PROJECT_DIR, BEHAV_DIR, DERIV_DIR
 
 
@@ -22,52 +21,64 @@ def read_behav_data(sub, phase):
     else: 
         raise ValueError("This is not a valid experimental phase, please specify either 'enc' or 'ret'")
     
-
+# TODO: still keep 99 and don't replace with NAN
 def process_enc_data(sub, data):
-    """Excludes NaN values, and adds columns for correct encoding."""
+    """Excludes NaN values, and adds columns for ground truth stimulus identity.
+    
+    Coding of Enc_trialtype column:
+    1 = low distraction left target
+    2 = low distraction right target
+    3 = high distraction left target
+    4 = high distraction right target
+
+    Coding of Enc_response column:
+    37 = nature
+    39 = manmade
+    99 = no response 
+    
+    """
 
     # replace 0 values with NAN
-    data = data.replace(0, np.nan)
+    # Treat 99 as missing response
+    data['Enc_response'] = data['Enc_response'].replace(99, np.nan)
 
-    # use value counts method 
+    # use value counts method - shows twice as much high distraction than low distraction trials
     print('VALUES IN:', data['Enc_trialtype'].value_counts())
     print('VALUES IN:', data['Enc_response'].value_counts())
 
-    # TODO: Double check if this is correct
     # add ground truth label of pictures, depending on whether their letter is capitalized
-    data['GroundTruth_Left'] = data['Pic_left'].apply(
+    data['Pic_label_left'] = data['Pic_left'].apply(
     lambda x: 'manmade' if x[0].isupper() else 'nature')
 
-    data['GroundTruth_Right'] = data['Pic_right'].apply(
+    data['Pic_label_right'] = data['Pic_right'].apply(
     lambda x: 'manmade' if x[0].isupper() else 'nature')
     
-    # add column to indicate whether target location of trial (i.e. left or right)
-    data['Target_Loc'] = data['Enc_trialtype'].apply(
+    # add column to indicate whether target stimulus was left or right
+    data['Target'] = data['Enc_trialtype'].apply(
         lambda x: 'left' if (x == 1 or x == 3) else 'right'
     )
 
-    # add column for correct encoding
     conditions_correct = [
-
     # correct nature classification
-    (data['GroundTruth_Left'] == 'nature') & ((data['Enc_trialtype'] ==  1) | (data['Enc_trialtype'] == 3)) & (data['Enc_response'] == 37),  # 1 & 3 indicate that targets were presented left, Enc_response: 37 indicates nature pictures
+    # 1 & 3 indicate that targets were presented left, Enc_response: 37 indicates nature classiffication
+    (data['Pic_label_left'] == 'nature') & ((data['Enc_trialtype'] ==  1) | (data['Enc_trialtype'] == 3)) & (data['Enc_response'] == 37),  
 
-    (data['GroundTruth_Right'] == 'nature') & ((data['Enc_trialtype'] ==  2) | (data['Enc_trialtype'] == 4))& (data['Enc_response'] == 37),
+    (data['Pic_label_right'] == 'nature') & ((data['Enc_trialtype'] ==  2) | (data['Enc_trialtype'] == 4))& (data['Enc_response'] == 37),
     
     # correct manmade classification
-    (data['GroundTruth_Left'] == 'manmade') & ((data['Enc_trialtype'] ==  1) | (data['Enc_trialtype'] == 3)) & (data['Enc_response'] == 39),
+    (data['Pic_label_left'] == 'manmade') & ((data['Enc_trialtype'] ==  1) | (data['Enc_trialtype'] == 3)) & (data['Enc_response'] == 39),
 
-    (data['GroundTruth_Right'] == 'manmade') & ((data['Enc_trialtype'] ==  2) | (data['Enc_trialtype'] == 4)) & (data['Enc_response'] == 39)
+    (data['Pic_label_right'] == 'manmade') & ((data['Enc_trialtype'] ==  2) | (data['Enc_trialtype'] == 4)) & (data['Enc_response'] == 39)
 
     ]
 
-    # TODO: double check if this is correct
-    values_correct = ['correct', 'correct', 'correct', 'correct']
+    values_correct = ['correct']*4
 
-    data['Enc_accuracy'] = np.select(conditions_correct, values_correct,  default='incorrect') 
+    # create a new column to reflect semantic classification
+    data['Enc_accuracy'] = np.select(conditions_correct, values_correct, default='incorrect')
 
-    # drop NA values
-    data = data.dropna()
+    # classify NAN values in Enc_response as no_response
+    data.loc[data['Enc_response'].isna(), 'Enc_accuracy'] = 'no_response'
 
     data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', 'processed', f'sub-{sub}-enc_processed.csv'), sep = ',', header = True, index = False)
 
@@ -76,33 +87,63 @@ def process_enc_data(sub, data):
 
 def process_ret_data(sub, data):
 
+    """Process data from retrieval phase.
+    
+    Coding of Ret_trialtype column:
+    1 = low distraction target left
+    2 = low distraction target right
+    3 = high distraction target left
+    4 = high distraction target right
+    40 = distractor stimulus
+    92 = novel stimulus
+
+    Coding of Ret_response column:
+    37 = old
+    39 = new
+    99 = no response 
+
+    Coding of Conf_response column:
+    37 = not very confident
+    40 = medium confident
+    39 = very confident
+    
+    """
+
     # encode NaN values
-    data['Ret_RT'] = data['Ret_RT'].replace(0, np.nan)
+    # data['Ret_RT'] = data['Ret_RT'].replace(0, np.nan)
 
 
-    # Add column that encodes hits & misses (based on the trial type and the subjects respose)
+    # check how many non-responses there were
+    print(data['Ret_response'].value_counts())
+
+    ## TODO: double check if I am doing this correctly!
+    # Encode hits & misses 
     conditions = [
 
-    # Hits 
-    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  1) | (data['Ret_trialtype'] == 2)), # hit low distraction target
+    ## Hits 
+    # hit low distraction target
+    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  1) | (data['Ret_trialtype'] == 2)), 
 
-    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  3) | (data['Ret_trialtype'] == 4)), # hit high distraction target
+    # hit high distraction target
+    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  3) | (data['Ret_trialtype'] == 4)), 
 
-    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  30) | (data['Ret_trialtype'] == 40)),  # hit distractor
+    # hit distractor
+    (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  30) | (data['Ret_trialtype'] == 40)),  
 
-    ## FIXME: I don't get how this can classified as a miss?? Because this is just the participants judgement old/new in combination with 
-    ## the target trial type 
-    # Misses
-    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  1) | (data['Ret_trialtype'] == 2)),  # miss low distraction target
+    ## Misses
+    # miss low distraction target
+    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  1) | (data['Ret_trialtype'] == 2)),  
 
-    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  3) | (data['Ret_trialtype'] == 4)), # miss high distraction targets
+    # miss high distraction targets
+    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  3) | (data['Ret_trialtype'] == 4)), 
 
-    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  30) | (data['Ret_trialtype'] == 40)),  # miss distractor 
+    # miss distractor 
+    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  30) | (data['Ret_trialtype'] == 40)), 
 
-    # False Alarms
+    # false alarms (pictures judges as old that were new)
     (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  91) | (data['Ret_trialtype'] == 92)), 
 
-    # True Negatives. aka pictures judged as new, which were actually new
+    # true negatives (pictures judged as new, which were actually new)
     (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  91) | (data['Ret_trialtype'] == 92))
 
     ]
@@ -110,32 +151,37 @@ def process_ret_data(sub, data):
     # create list of values to assign to each condition
     values = ['hit_low_dist_tar', 'hit_high_dist_tar', 'hit_distractor', 'miss_low_dist_tar', 'miss_high_dist_tar', 'miss_distractor', 'false_alarms', 'correct_new']
 
-    # TODO: double check if this is correct
-    # create a new column and use np.select
-    data['hit_category'] = np.select(conditions, values,  default=None) # default describes all of the values that are not true
+    # create column for hit_category
+    data['hit_category'] = np.select(conditions, values,  default=None)
 
-    ## Create column for confidence judgements
+    # create column for confidence judgements (combined with response judgement)
     conditions_confidence = [
 
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  37)), # not confident old
+        # not confident old judgement
+        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  37)), 
 
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)), # medium confident old
+        # medium confident old judgement
+        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)), 
 
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39)), # very confident old
+        # very confident old judgment
+        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39)), 
 
-        ((data['Ret_response'] == 39) & (data['Conf_response'] ==  37)),  # not confident new
+        # not confident new judgment
+        ((data['Ret_response'] == 39) & (data['Conf_response'] ==  37)),  
 
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)),  # medium confident new
+        # medium confident new judgment
+        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)),  
 
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39))  # very confident new
+        # very confident new judgment
+        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39)) 
     ]
 
-    values_confidence = ['not_conf_old', 'med_conf_old', 'high_conf_old', 'not_conf_new', 'med_conf_new', 'high_conf_new']
+    values_confidence = ['not_conf_old', 'medium_conf_old', 'high_conf_old', 'not_conf_new', 'medium_conf_new', 'high_conf_new']
 
-    data['confidence_category'] = np.select(conditions_confidence, values_confidence, default = None) 
+    data['confidence_category'] = np.select(conditions_confidence, values_confidence, default=None) 
 
     # drop NaN values
-    data = data.dropna()
+    # data = data.dropna()
 
     # drop unnecessary columns
     data = data.drop(columns = ['Gender',  'Edu', 'TrialNr'])
@@ -147,30 +193,20 @@ def process_ret_data(sub, data):
 
 
 def calculate_encoding_accuracy(data):
-    """Computes count (ratio) of correctly encoded pictures during encoding phase.
+    """Computes ratio of: count correct classified / count total pictures
+    during encoding phase.
     """
-    # be consistent with count and sum method (but I think here its correct); it also very much depends on how I index
-    count_correct1 = (data['Enc_accuracy'] == 'correct').sum()
+    # count correct classified
+    count_correct = count_total = data['Enc_accuracy'].isin(['correct']).sum()
 
-    count_correct2 = len(data[data['Enc_accuracy'] == 'correct'])
+    # count total with no responses excluded
+    count_total = data['Enc_accuracy'].isin(['correct', 'incorrect']).sum()
 
-    assert count_correct1 == count_correct2 ## yess, that's the same thing!
-
-    count_total = data['Enc_accuracy'].count()
-
-    print('# CORRECT 1 ', count_correct1)
-    print('# CORRECT 2 ', count_correct2)
-    print('# TOTAL', count_total)
-
-    return count_correct1 / count_total
-
-# what is the difference between sum and count attribute? I need to use sum, cause the output is a series of boolean!
-# see: https://stackoverflow.com/questions/48684192/what-is-the-difference-between-sum-and-count-in-pandas 
-
+    return count_correct / count_total
 
 
 def calculate_retrieval_accuracy(data):
-    """Computes count of correctly remembered pictures during retrieval phase.
+    """Computes ratio of correctly remembered pictures during retrieval phase.
     """
     count_correct = data['hit_category'].str.contains('hit').sum() 
   
@@ -193,10 +229,7 @@ def calculate_retrieval_accuracy(data):
 
     assert count_correct + misses + fn_count == total_count, 'Something does not add up'
 
-
     return count_correct / (misses + count_correct)
-
-
 
 
 def calculate_hitrate(data, trial_wise = False):
@@ -207,6 +240,8 @@ def calculate_hitrate(data, trial_wise = False):
 
     misses_count = data['hit_category'].str.contains('miss').sum()
     
+
+    # FIXME: but this should also include the correctly identified new pictures, right?
     hits_count = data['hit_category'].str.contains('hit').sum()
 
     # number of observations
@@ -237,9 +272,7 @@ def calculate_hitrate(data, trial_wise = False):
         return (hits_count / (hits_count + misses_count))
 
 
-
-
-
+# I guess this code snippet is old?
 # def calculate_fa_rate(data): 
 #     """Calculate FA Rate: False Positives / (False Positives + True Negatives).
 #     """
@@ -344,7 +377,6 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     'RT_ret_mean': [mean_RT_ret]
 
 })
-    print(df)
 
     # save pandas dataframe to file
     df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral','summary_stats', f'sub-{sub}_summary.csv'), sep = ',', header = True, index = False)
@@ -352,6 +384,50 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     return df
 
 
-
 if __name__ == "__main__":
-    pass
+    # set system variables
+    sub = sys.argv[1]
+
+    # behavioral data from encoding phase
+    data_encoding = read_behav_data(sub=sub, phase='enc')
+    print("BEHAVIORAL DATA FROM ENCODING:", data_encoding.head(5))
+    data_enc = process_enc_data(sub=sub, data=data_encoding)
+
+
+    # # behavioral data from retrieval phase
+    # data_retrieval = read_behav_data(sub=sub, phase='ret')
+    # print("BEHAVIORAL DATA FROM RETRIEVAL:", data_retrieval.head(5))
+    # data_ret = process_ret_data(sub=sub, data=data_retrieval)
+    
+
+    #  calculate updated encoding accuracy (is higher!)
+    encoding_acc = calculate_encoding_accuracy(data=data_enc)
+    print('enc acc new', encoding_acc)
+
+
+
+
+
+
+    # # hitrate_low, hitrate_high, hitrate_dist = calculate_hitrate(data=data_ret, trial_wise=True)
+
+    # # print(hitrate_low)
+    # # print(hitrate_high)
+    # # print(hitrate_dist)
+
+
+    # farate = calculate_fa_rate(data_ret)
+    # print("THIS IS THE FA RATE", farate)
+
+
+    # accuracy_retrieval = calculate_retrieval_accuracy(data_ret)
+    # print('ACCURACY RETRIEVAL', accuracy_retrieval)
+
+    # hitrate = calculate_hitrate(data_ret)
+
+    # ## check whether dropping NAN values has worked
+    # assert data_enc['Enc_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
+    # assert data_ret['Ret_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
+
+    # print('\nCREATING BEHAVIORAL SUMMARY\n')
+    # create_behavioral_summary(sub=param1, data_enc=data_enc, data_ret=data_ret)
