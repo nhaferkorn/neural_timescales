@@ -1,4 +1,4 @@
-"""This script analyses the reaction time data and computes memory performance metrics."""
+"""This script includes functions to process the behavioral data."""
 
 # make imports
 import sys
@@ -20,8 +20,7 @@ def read_behav_data(sub, phase):
         return pd.read_excel(os.path.join(BEHAV_DIR, f"Ret_{sub}.xlsx"),  names = ['ID', 'Gender', 'Age', 'Edu', 'TrialNr', 'Pic_left', 'Pic_right', 'Ret_trialtype', 'Ret_response', 'Ret_RT', 'Conf_response', "Conf_RT"])
     else: 
         raise ValueError("This is not a valid experimental phase, please specify either 'enc' or 'ret'")
-    
-# TODO: still keep 99 and don't replace with NAN
+  
 def process_enc_data(sub, data):
     """Excludes NaN values, and adds columns for ground truth stimulus identity.
     
@@ -38,13 +37,15 @@ def process_enc_data(sub, data):
     
     """
 
-    # replace 0 values with NAN
-    # Treat 99 as missing response
-    data['Enc_response'] = data['Enc_response'].replace(99, np.nan)
+    # replace Enc_Ret that have value 0 with NAN
+    data['Enc_RT'] = data['Enc_RT'].replace(0, np.nan)
 
     # use value counts method - shows twice as much high distraction than low distraction trials
     print('VALUES IN:', data['Enc_trialtype'].value_counts())
     print('VALUES IN:', data['Enc_response'].value_counts())
+
+    # count NAN values 
+    print('NAN VALUES', data['Enc_RT'].isna().sum()) 
 
     # add ground truth label of pictures, depending on whether their letter is capitalized
     data['Pic_label_left'] = data['Pic_left'].apply(
@@ -60,7 +61,6 @@ def process_enc_data(sub, data):
 
     conditions_correct = [
     # correct nature classification
-    # 1 & 3 indicate that targets were presented left, Enc_response: 37 indicates nature classiffication
     (data['Pic_label_left'] == 'nature') & ((data['Enc_trialtype'] ==  1) | (data['Enc_trialtype'] == 3)) & (data['Enc_response'] == 37),  
 
     (data['Pic_label_right'] == 'nature') & ((data['Enc_trialtype'] ==  2) | (data['Enc_trialtype'] == 4))& (data['Enc_response'] == 37),
@@ -77,8 +77,8 @@ def process_enc_data(sub, data):
     # create a new column to reflect semantic classification
     data['Enc_accuracy'] = np.select(conditions_correct, values_correct, default='incorrect')
 
-    # classify NAN values in Enc_response as no_response
-    data.loc[data['Enc_response'].isna(), 'Enc_accuracy'] = 'no_response'
+    # classify 99 values in Enc_response as no_response
+    data.loc[data['Enc_response'] == 99, 'Enc_accuracy'] = 'no_response'
 
     data.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'behavioral', 'processed', f'sub-{sub}-enc_processed.csv'), sep = ',', header = True, index = False)
 
@@ -109,14 +109,10 @@ def process_ret_data(sub, data):
     
     """
 
-    # encode NaN values
-    # data['Ret_RT'] = data['Ret_RT'].replace(0, np.nan)
+    # replace 0 Ret_RT values & Conf_Ret values with NAN
+    data['Ret_RT'] = data['Ret_RT'].replace(0, np.nan)
+    data['Conf_RT'] = data['Conf_RT'].replace(0, np.nan)
 
-
-    # check how many non-responses there were
-    print(data['Ret_response'].value_counts())
-
-    ## TODO: double check if I am doing this correctly!
     # Encode hits & misses 
     conditions = [
 
@@ -140,48 +136,47 @@ def process_ret_data(sub, data):
     # miss distractor 
     (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  30) | (data['Ret_trialtype'] == 40)), 
 
-    # false alarms (pictures judges as old that were new)
+    ## false alarms
+    # new items that were incorrectly classified as old
     (data['Ret_response'] == 37) & ((data['Ret_trialtype'] ==  91) | (data['Ret_trialtype'] == 92)), 
 
-    # true negatives (pictures judged as new, which were actually new)
-    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  91) | (data['Ret_trialtype'] == 92))
+    ## correct new
+    # new items that were correctly classified as new
+    (data['Ret_response'] == 39) & ((data['Ret_trialtype'] ==  91) | (data['Ret_trialtype'] == 92)),
+
+    # no responses
+    (data['Ret_response'] == 99)
 
     ]
 
     # create list of values to assign to each condition
-    values = ['hit_low_dist_tar', 'hit_high_dist_tar', 'hit_distractor', 'miss_low_dist_tar', 'miss_high_dist_tar', 'miss_distractor', 'false_alarms', 'correct_new']
+    values = ['hit_low_dist_target', 'hit_high_dist_target', 'hit_distractor', 'miss_low_dist_target', 'miss_high_dist_target', 'miss_distractor', 'false_alarms', 'correct_new', 'no_response']
+
 
     # create column for hit_category
     data['hit_category'] = np.select(conditions, values,  default=None)
 
-    # create column for confidence judgements (combined with response judgement)
+
+    # create confidence judgements
     conditions_confidence = [
 
-        # not confident old judgement
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  37)), 
+        # not confident
+        (data['Conf_response'] ==  37), 
 
-        # medium confident old judgement
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)), 
+        # medium confident
+        (data['Conf_response'] ==  40), 
 
-        # very confident old judgment
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39)), 
+        # very confident 
+        (data['Conf_response'] ==  39),
 
-        # not confident new judgment
-        ((data['Ret_response'] == 39) & (data['Conf_response'] ==  37)),  
+        # no response
+        (data['Conf_response'] ==  99),
 
-        # medium confident new judgment
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  40)),  
-
-        # very confident new judgment
-        ((data['Ret_response'] == 37) & (data['Conf_response'] ==  39)) 
     ]
 
-    values_confidence = ['not_conf_old', 'medium_conf_old', 'high_conf_old', 'not_conf_new', 'medium_conf_new', 'high_conf_new']
+    values_confidence = ['low', 'medium', 'high', 'no_response']
 
-    data['confidence_category'] = np.select(conditions_confidence, values_confidence, default=None) 
-
-    # drop NaN values
-    # data = data.dropna()
+    data['confidence'] = np.select(conditions_confidence, values_confidence, default=None) 
 
     # drop unnecessary columns
     data = data.drop(columns = ['Gender',  'Edu', 'TrialNr'])
@@ -192,8 +187,8 @@ def process_ret_data(sub, data):
     return data
 
 
-def calculate_encoding_accuracy(data):
-    """Computes ratio of: count correct classified / count total pictures
+def calculate_encoding_task_performance(data):
+    """Computes ratio of: count correctly classified pictures / count total pictures
     during encoding phase.
     """
     # count correct classified
@@ -205,49 +200,56 @@ def calculate_encoding_accuracy(data):
     return count_correct / count_total
 
 
-def calculate_retrieval_accuracy(data):
-    """Computes ratio of correctly remembered pictures during retrieval phase.
-    """
-    count_correct = data['hit_category'].str.contains('hit').sum() 
-  
-    # define true negatives 
-    true_negatives = data['hit_category'].str.contains('correct_new').sum()
+def calculate_retrieval_task_performance(data):
+    """Computes ratio of correct / total responses during retrieval phase.
+    Excluding non-responses.
 
-    count_correct = count_correct + true_negatives
+    Responses correct: 
+    - hits (targets & distractors)
+    - correct new
+
+    Responses incorrect:
+    - misses (targets & distractors)
+    - false alarms 
+    """
+
+    # count correct responses
+    count_hits = data['hit_category'].str.contains('hit').sum() 
+    count_hits_new = data['hit_category'].str.contains('correct_new').sum()
+
+    count_correct = count_hits + count_hits_new
                      
-    # no, i need to take only the old pictures as reference
-    misses = data['hit_category'].str.contains('miss').sum()
+    # count incorrect responses
+    count_misses = data['hit_category'].str.contains('miss').sum()
+    count_false_alarms = data['hit_category'].str.contains('false_alarms').sum()
 
-    # and just for sake of quality calculate total count
+    count_incorrect = count_misses + count_false_alarms
+
+
+    # sanity checks
+    count_no_response = data['hit_category'].str.contains('no_response').sum()
     total_count = data['hit_category'].count()
-    fn_count = data['hit_category'].str.contains('false_alarms').sum()
+    assert count_correct + count_incorrect + count_no_response == total_count
 
-    # print('# CORRECT HITS', count_correct)
-    # print('# MISSES', misses)
-    # print('# FALSE NEGATIVE', fn_count )
-    # print('# TOTAL COUNT', total_count)
-
-    assert count_correct + misses + fn_count == total_count, 'Something does not add up'
-
-    return count_correct / (misses + count_correct)
+    return count_correct / (count_correct + count_incorrect)
 
 
-def calculate_hitrate(data, trial_wise = False):
+def calculate_hitrate(data, trial_wise=False):
 
-    """Calculate hitrate, by taking the ratio of number 
-    of correct responses and number of misses + hits.
+    """Calculate hitrate: success in recognizing old items (targets & distractors) only. Ignores new items entirely.
+
+    Formula:
+
+    hit rate = Correct old responses to old items / total old items presented
+
     """
 
-    misses_count = data['hit_category'].str.contains('miss').sum()
-    
+    # count correctly identified old items (targets & distractors)
+    count_old_hits = data['hit_category'].str.contains('hit').sum()
 
-    # FIXME: but this should also include the correctly identified new pictures, right?
-    hits_count = data['hit_category'].str.contains('hit').sum()
+    # count number of missed old items
+    count_old_misses =  data['hit_category'].str.contains('miss').sum()
 
-    # number of observations
-    print('# OF HITS:', hits_count)
-    print('# OF MISSES', misses_count)
-    print('# OF OBSERVATIONS', len(data))
         
     if trial_wise:
         
@@ -263,54 +265,28 @@ def calculate_hitrate(data, trial_wise = False):
         hits_distractor = data['hit_category'].str.contains('hit_distractor').sum()
         miss_distractor = data['hit_category'].str.contains('miss_distractor').sum()
 
-        assert (hits_low_dist + hits_high_dist + hits_distractor) == hits_count
+        assert (hits_low_dist + hits_high_dist + hits_distractor) == count_old_hits
 
-        return (hits_low_dist / (hits_low_dist + miss_low_dist)), (hits_high_dist / (hits_high_dist + miss_high_dist)), (hits_distractor / (hits_distractor  + miss_distractor))
+        return (hits_low_dist / (hits_low_dist + miss_low_dist)), (hits_high_dist / (hits_high_dist + miss_high_dist)), (hits_distractor / (hits_distractor + miss_distractor))
     
     else:
-
-        return (hits_count / (hits_count + misses_count))
-
-
-# I guess this code snippet is old?
-# def calculate_fa_rate(data): 
-#     """Calculate FA Rate: False Positives / (False Positives + True Negatives).
-#     """
-#     # define false positives
-#     false_positives = data[data['hit_category'] == 'false_alarms']
-
-#     print('LENGTH FALSE POSITIVES', len(false_positives))
-
-#     # define true negatives 
-#     true_negatives = data[data['hit_category'] == 'correct_new']
-
-#     print('LENGTH TRUE NEGATIVES', len(true_negatives)) 
-
-#     # return false alarm rate
-#     return len(false_positives) / (len(false_positives) + len(true_negatives))
+        return count_old_hits / (count_old_hits + count_old_misses)
 
 
-
-# TODO: check if I am actually computing the correct ratio...
 def calculate_fa_rate(data): 
-    """Calculate FA Rate: False Positives / (False Positives + True Negatives). 
+    """Calculates FA rate: False Positives / (False Positives + True Negatives). 
     """
     # define false positives
     false_positives = data['hit_category'].str.contains('false_alarms').sum()
 
-    print('# FALSE POSITIVES', false_positives)
-
     # define true negatives 
     true_negatives = data['hit_category'].str.contains('correct_new').sum()
-
-    print('# TRUE NEGATIVES', true_negatives)
 
     # return false alarm rate
     return false_positives / (false_positives + true_negatives)
 
 
 
-# FIXME: there is still something wrong with how I calculate the hitrate!
 def calculate_d_prime(hitrate, fa_rate):
     # standardize hitrate & false alarm rate
     z_score_hitrate = scipy.stats.norm.ppf(hitrate)
@@ -330,19 +306,15 @@ def classify_age(data):
 
 def create_behavioral_summary(sub, data_enc, data_ret):
     """Creates a summary pd.DataFrame of the behavioral data, 
-    including: Sub-ID, Age, Encoding Accuracy & Memory Performance (D' metrics).
-
-    Args:
-        sub (_type_): _description_
-        data (_type_): _description_
+    including: Sub-ID, Age, Task Performance, Hit Rates, FA Rate, Mean RTs.
     """
 
     Sub_ID = sub 
 
     Age = classify_age(data_enc)
 
-    Enc_Accuracy = calculate_encoding_accuracy(data_enc)
-    ret_accuracy = calculate_retrieval_accuracy(data_ret)
+    Enc_performance = calculate_encoding_task_performance(data_enc)
+    Ret_performance = calculate_retrieval_task_performance(data_ret)
 
     # calculate false alarm rate
     farate = calculate_fa_rate(data_ret)
@@ -358,16 +330,27 @@ def create_behavioral_summary(sub, data_enc, data_ret):
     D_Prime_Dist = calculate_d_prime(hitrate=hitrate_dist, fa_rate=farate)
     D_Prime_Targets_Avg = (D_Prime_High + D_Prime_Low) / 2 # d prime averaged over low and high distractor targets
 
+
+    # calculate count of non-responses during enc & ret
+    NAN_RT_enc = data_enc['Enc_RT'].isna().sum()
+    NAN_RT_ret = data_ret['Ret_RT'].isna().sum()
+
     # calculate mean reaction time for enc and ret data
     mean_RT_enc = data_enc['Enc_RT'].mean()
     mean_RT_ret = data_ret['Ret_RT'].mean()
 
-
+    # TODO: I should maybe also include the average hitrate for targets
     df = pd.DataFrame({
     'sub': [Sub_ID],
     'age': [Age],
-    'enc_accuracy': [Enc_Accuracy],
-    'ret_accuracy': [ret_accuracy],
+    'enc_performance': [Enc_performance],
+    'ret_performance': [Ret_performance],
+    'enc_non_responses': [NAN_RT_enc],
+    'ret_non_responses': [NAN_RT_ret],
+    'hitrate_global': [hitrate_global],
+    'hitrate_lowdist': [hitrate_low],
+    'hitrate_highdist': [hitrate_high],
+    'hitrate_distractors': [hitrate_dist],
     'd_prime_global': [D_Prime_Global],
     'd_prime_highdist': [D_Prime_High],
     'd_prime_lowdist': [D_Prime_Low],
@@ -385,49 +368,4 @@ def create_behavioral_summary(sub, data_enc, data_ret):
 
 
 if __name__ == "__main__":
-    # set system variables
-    sub = sys.argv[1]
-
-    # behavioral data from encoding phase
-    data_encoding = read_behav_data(sub=sub, phase='enc')
-    print("BEHAVIORAL DATA FROM ENCODING:", data_encoding.head(5))
-    data_enc = process_enc_data(sub=sub, data=data_encoding)
-
-
-    # # behavioral data from retrieval phase
-    # data_retrieval = read_behav_data(sub=sub, phase='ret')
-    # print("BEHAVIORAL DATA FROM RETRIEVAL:", data_retrieval.head(5))
-    # data_ret = process_ret_data(sub=sub, data=data_retrieval)
-    
-
-    #  calculate updated encoding accuracy (is higher!)
-    encoding_acc = calculate_encoding_accuracy(data=data_enc)
-    print('enc acc new', encoding_acc)
-
-
-
-
-
-
-    # # hitrate_low, hitrate_high, hitrate_dist = calculate_hitrate(data=data_ret, trial_wise=True)
-
-    # # print(hitrate_low)
-    # # print(hitrate_high)
-    # # print(hitrate_dist)
-
-
-    # farate = calculate_fa_rate(data_ret)
-    # print("THIS IS THE FA RATE", farate)
-
-
-    # accuracy_retrieval = calculate_retrieval_accuracy(data_ret)
-    # print('ACCURACY RETRIEVAL', accuracy_retrieval)
-
-    # hitrate = calculate_hitrate(data_ret)
-
-    # ## check whether dropping NAN values has worked
-    # assert data_enc['Enc_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
-    # assert data_ret['Ret_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
-
-    # print('\nCREATING BEHAVIORAL SUMMARY\n')
-    # create_behavioral_summary(sub=param1, data_enc=data_enc, data_ret=data_ret)
+    pass
