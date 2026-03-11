@@ -286,7 +286,6 @@ def calculate_fa_rate(data):
     return false_positives / (false_positives + true_negatives)
 
 
-
 def calculate_d_prime(hitrate, fa_rate):
     # standardize hitrate & false alarm rate
     z_score_hitrate = scipy.stats.norm.ppf(hitrate)
