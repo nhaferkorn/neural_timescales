@@ -212,132 +212,12 @@ path_enc = os.path.join(DERIV_DIR, 'figures', f'corrmap_clusters_rawtau_rawrt_en
 path_ret = os.path.join(DERIV_DIR, 'figures', f'corrmap_clusters_rawtau_rawrt_retrieval_{date}.png')
 path_all = os.path.join(DERIV_DIR, 'figures', f'corrmap_clusters_rawtau_fix_all_{date}.png')
 
-# # for encoding timescales (log edition)
-# labels = {
-#     'log_tau_encoding': 'Tau (Enc)',
-#     'RT_enc_log_mean': 'RT (Enc)',
-#     'hitrate_targets': 'Hits (Targets)'
-# }
-
-# data = df_merged[['log_tau_encoding','RT_enc_log_mean','hitrate_targets']].copy()
-
-# # optional relabeling
-# data = data.rename(columns=labels)
-
-# corr = data.corr(method='spearman')
-
-# mask = np.zeros_like(corr, dtype=bool)
-# mask[np.triu_indices_from(mask)] = True
-# np.fill_diagonal(mask, False)
-
-
-# fig = plt.figure(figsize=(12, 8))
-# gs = GridSpec(1, 2, width_ratios=[20, 1], wspace=0.15)
-
-# ax = fig.add_subplot(gs[0])      # heatmap axis
-# cax = fig.add_subplot(gs[1])     # colorbar axis
-
-
-# sns.heatmap(
-#     corr,
-#     annot=True,
-#     annot_kws={"fontsize": 18},
-#     fmt='.2f',
-#     linewidths=0.5,
-#     cmap=cmocean.cm.tempo,
-#     mask=mask,
-#     ax=ax,
-#     cbar_ax=cax
-# )
-
-# ax.set_title('Encoding Correlations: Log Tau & Log RT', fontsize=20, pad=20)
-# cax.set_ylabel(
-#     r'Correlation ($\rho$)',
-#     fontsize=12,
-#     rotation=90,
-#     labelpad=20,
-#     va='center'   # vertical alignment
-# )
-
-
-# # add p-values
-# # Create a function to calculate and format p-values
-# p_values = np.full((corr.shape[0], corr.shape[1]), np.nan)
-# for i in range(corr.shape[0]):
-#     for j in range(i+1, corr.shape[1]):
-#         x = data.iloc[:, i]
-#         y = data.iloc[:, j]
-#         mask = ~np.logical_or(np.isnan(x), np.isnan(y))
-#         if np.sum(mask) > 0:
-#             p_values[i, j] = spearmanr(x[mask], y[mask])[1]
-
-# p_values = pd.DataFrame(p_values, columns=corr.columns, index=corr.index)
-
-# # Create a mask for the p-values heatmap
-# mask_pvalues = np.triu(np.ones_like(p_values), k=1)
-
-# # Calculate the highest and lowest correlation coefficients
-# max_corr = np.max(corr.max())
-# min_corr = np.min(corr.min())
-
-# # Get colormap + normalization from heatmap
-# cmap = ax.collections[0].cmap
-# norm = ax.collections[0].norm
-
-# # Annotate the heatmap with p-values and change text color based on correlation value
-# for i in range(p_values.shape[0]):
-#     for j in range(p_values.shape[1]):
-#         if mask_pvalues[i, j]:
-#             p_value = p_values.iloc[i, j]
-#             if not np.isnan(p_value):
-#                 correlation_value = corr.iloc[i, j]
-#                 # luminance based text colors
-#                 rgba = cmap(norm(correlation_value))
-#                 r, g, b, _ = rgba
-#                 luminance = 0.299*r + 0.587*g + 0.114*b
-#                 text_color = 'white' if luminance < 0.5 else 'black'
-
-#                 if p_value <= 0.01:
-#                 #include double asterisks for p-value <= 0.01
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})**',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-#                 elif p_value <= 0.05:
-#                 #include single asterisks for p-value <= 0.05
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})*',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-#                 else:
-#                     ax.text(i + 0.5, j + 0.65, f'(p = {p_value:.2f})',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-
-# # wrap labels
-# x_labels = [textwrap.fill(t.get_text(), 15) for t in ax.get_xticklabels()]
-# y_labels = [textwrap.fill(t.get_text(), 15) for t in ax.get_yticklabels()]
-
-# ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=14)
-# ax.set_yticklabels(y_labels, rotation=0, ha="right", fontsize=14)
-
-# # ax.tick_params(axis='both', labelsize=14)
-
-# # fig.subplots_adjust(top=0.85)
-
-# # fig.tight_layout()
-# fig.savefig(path_enc_log, bbox_inches='tight')
 
 
 ## Correlation Matrix - Encoding Phase
 labels = {
-    'tau_encoding': 'Tau (Enc)',
+    'tau_encoding': r'$\tau$ (Enc)',
     'RT_enc_mean': 'RT (Enc)',
-    #'hitrate_targets': 'Hits (Targets)',
     'enc_performance': 'Performance (Enc)'
 }
 
@@ -358,7 +238,6 @@ gs = GridSpec(1, 2, width_ratios=[20, 1], wspace=0.15)
 
 ax = fig.add_subplot(gs[0])      # heatmap axis
 cax = fig.add_subplot(gs[1])     # colorbar axis
-
 
 sns.heatmap(
     corr,
@@ -383,7 +262,6 @@ cax.set_ylabel(
 
 cax.yaxis.set_ticks_position('left')
 
-# add p-values
 # Create a function to calculate and format p-values
 p_values = np.full((corr.shape[0], corr.shape[1]), np.nan)
 for i in range(corr.shape[0]):
@@ -452,134 +330,14 @@ ax.set_yticklabels(y_labels, rotation=0, ha="right", fontsize=14)
 fig.savefig(path_enc,  bbox_inches='tight')
 
 
-##################################################################################################
-
-# # for retrieval phase (log values)
-# labels = {
-#     'log_tau_retrieval': 'Tau (Ret)',
-#     'RT_ret_log_mean': 'RT (Ret)',
-#     'hitrate_targets': 'Hits (Targets)'
-# }
-
-# data = df_merged[['log_tau_retrieval','RT_ret_log_mean','hitrate_targets']].copy()
-
-# # optional relabeling
-# data = data.rename(columns=labels)
-
-# corr = data.corr(method='spearman')
-
-# mask = np.zeros_like(corr, dtype=bool)
-# mask[np.triu_indices_from(mask)] = True
-# np.fill_diagonal(mask, False)
-
-# fig = plt.figure(figsize=(12, 8))
-# gs = GridSpec(1, 2, width_ratios=[20, 1], wspace=0.15)
-
-# ax = fig.add_subplot(gs[0])      # heatmap axis
-# cax = fig.add_subplot(gs[1])     # colorbar axis
-
-
-# sns.heatmap(
-#     corr,
-#     annot=True,
-#     annot_kws={"fontsize": 18},
-#     fmt='.2f',
-#     linewidths=0.5,
-#     cmap=cmocean.cm.matter,
-#     mask=mask,
-#     ax=ax,
-#     cbar_ax=cax
-#     #cbar_kws=dict(location="left", orientation='horizontal')
-# )
-
-# ax.set_title('Retrieval Correlations: Log Tau & Log RT', fontsize=20, pad=20)
-# cax.set_ylabel(
-#     r'Correlation ($\rho$)',
-#     fontsize=12,
-#     rotation=90,
-#     labelpad=20,
-#     va='center'   # vertical alignment
-# )
-
-
-# # add p-values
-# # Create a function to calculate and format p-values
-# p_values = np.full((corr.shape[0], corr.shape[1]), np.nan)
-# for i in range(corr.shape[0]):
-#     for j in range(i+1, corr.shape[1]):
-#         x = data.iloc[:, i]
-#         y = data.iloc[:, j]
-#         mask = ~np.logical_or(np.isnan(x), np.isnan(y))
-#         if np.sum(mask) > 0:
-#             p_values[i, j] = spearmanr(x[mask], y[mask])[1]
-
-# p_values = pd.DataFrame(p_values, columns=corr.columns, index=corr.index)
-
-# # Create a mask for the p-values heatmap
-# mask_pvalues = np.triu(np.ones_like(p_values), k=1)
-
-# # Calculate the highest and lowest correlation coefficients
-# max_corr = np.max(corr.max())
-# min_corr = np.min(corr.min())
-
-# # Get colormap + normalization from heatmap
-# cmap = ax.collections[0].cmap
-# norm = ax.collections[0].norm
-
-# # Annotate the heatmap with p-values and change text color based on correlation value
-# for i in range(p_values.shape[0]):
-#     for j in range(p_values.shape[1]):
-#         if mask_pvalues[i, j]:
-#             p_value = p_values.iloc[i, j]
-#             if not np.isnan(p_value):
-#                 correlation_value = corr.iloc[i, j]
-#                 # luminance based text colors
-#                 rgba = cmap(norm(correlation_value))
-#                 r, g, b, _ = rgba
-#                 luminance = 0.299*r + 0.587*g + 0.114*b
-#                 text_color = 'white' if luminance < 0.5 else 'black'
-
-#                 if p_value <= 0.01:
-#                 #include double asterisks for p-value <= 0.01
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})**',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-#                 elif p_value <= 0.05:
-#                 #include single asterisks for p-value <= 0.05
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})*',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-#                 else:
-#                     ax.text(i + 0.5, j + 0.65, f'(p = {p_value:.2f})',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=10,
-#                             color=text_color)
-
-# # wrap labels
-# x_labels = [textwrap.fill(t.get_text(), 15) for t in ax.get_xticklabels()]
-# y_labels = [textwrap.fill(t.get_text(), 15) for t in ax.get_yticklabels()]
-
-# ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=14)
-# ax.set_yticklabels(y_labels, rotation=0, ha="right", fontsize=14)
-
-
-# # fig.tight_layout()
-# fig.savefig(path_ret_log, bbox_inches='tight')
-
-
 
 ####
-# for retrieval phase (raw values)
+# Correlation Matrix - Retrieval Phase
 labels = {
-    'tau_retrieval': 'Tau (Ret)',
+    'tau_retrieval':  r'$\tau$ (Ret)',
     'RT_ret_mean': 'RT (Ret)',
     'hitrate_targets': 'Hits (Targets)',
-    'hitrate_distractors': 'Hits (Distractors)',
+    # 'hitrate_distractors': 'Hits (Distractors)',
     'hitrate_targets_highconf': 'Hits (High Conf)'
     # 'fa_rate': 'False Alarms'
 }
@@ -823,7 +581,7 @@ labels = {
     'RT_enc_mean': 'RT (Enc)',
     'RT_ret_mean': 'RT (Ret)',
     'hitrate_targets': 'Hits (Targets)',
-    'hitrate_distractors': 'Hits (Distractors)'
+    'hitrate_distractors': 'Hits (Dist)'
 }
 
 data = df_merged[['tau_fix_all','RT_enc_mean','RT_ret_mean', 'hitrate_targets', 'hitrate_distractors']].copy()
@@ -934,140 +692,6 @@ ax.set_yticklabels(y_labels, rotation=0, ha="right", fontsize=14)
 
 # fig.tight_layout()
 fig.savefig(path_all, bbox_inches='tight')
-
-
-
-
-
-#########################################################################################
-## Correlation Matrix - Across Phases (Encoding & Retrieval)
-# path_enc_ret = os.path.join(DERIV_DIR, 'figures', f'corrmap_clusters_raw_enc_ret_across_phase_{date}.png')
-
-
-# labels = {
-#     'tau_encoding': 'Tau (Enc)',
-#     'tau_retrieval': 'Tau (Ret)',
-#     'RT_ret_mean': 'RT (Ret)',
-#     'hitrate_targets': 'Hits (Targets)',
-# }
-
-# data = df_merged[['tau_encoding','tau_retrieval','RT_ret_mean', 'hitrate_targets']].copy()
-
-# # optional relabeling
-# data = data.rename(columns=labels)
-
-# corr = data.corr(method='spearman')
-
-# mask = np.zeros_like(corr, dtype=bool)
-# mask[np.triu_indices_from(mask)] = True
-# np.fill_diagonal(mask, False)
-
-
-# fig = plt.figure(figsize=(12, 8))
-# gs = GridSpec(1, 2, width_ratios=[20, 1], wspace=0.15)
-
-# ax = fig.add_subplot(gs[0])      # heatmap axis
-# cax = fig.add_subplot(gs[1])     # colorbar axis
-
-
-# sns.heatmap(
-#     corr,
-#     annot=True,
-#     annot_kws={"fontsize": 18},
-#     fmt='.2f',
-#     linewidths=0.5,
-#     cmap=cmocean.cm.tempo,
-#     mask=mask,
-#     ax=ax,
-#     cbar_ax=cax
-# )
-
-# # ax.set_title('Encoding Correlations: Raw Tau & Raw RT', fontsize=20, pad=20)
-# cax.set_ylabel(
-#     r'Correlation ($\rho$)',
-#     fontsize=12,
-#     rotation=90,
-#     labelpad=20,
-#     va='center'   # vertical alignment
-# )
-
-
-# # add p-values
-# # Create a function to calculate and format p-values
-# p_values = np.full((corr.shape[0], corr.shape[1]), np.nan)
-# for i in range(corr.shape[0]):
-#     for j in range(i+1, corr.shape[1]):
-#         x = data.iloc[:, i]
-#         y = data.iloc[:, j]
-#         mask = ~np.logical_or(np.isnan(x), np.isnan(y))
-#         if np.sum(mask) > 0:
-#             p_values[i, j] = spearmanr(x[mask], y[mask])[1]
-
-# p_values = pd.DataFrame(p_values, columns=corr.columns, index=corr.index)
-
-# # Create a mask for the p-values heatmap
-# mask_pvalues = np.triu(np.ones_like(p_values), k=1)
-
-# # Calculate the highest and lowest correlation coefficients
-# max_corr = np.max(corr.max())
-# min_corr = np.min(corr.min())
-
-# # Get colormap + normalization from heatmap
-# cmap = ax.collections[0].cmap
-# norm = ax.collections[0].norm
-
-# # Annotate the heatmap with p-values and change text color based on correlation value
-# for i in range(p_values.shape[0]):
-#     for j in range(p_values.shape[1]):
-#         if mask_pvalues[i, j]:
-#             p_value = p_values.iloc[i, j]
-#             if not np.isnan(p_value):
-#                 correlation_value = corr.iloc[i, j]
-#                 # luminance based text colors
-#                 rgba = cmap(norm(correlation_value))
-#                 r, g, b, _ = rgba
-#                 luminance = 0.299*r + 0.587*g + 0.114*b
-#                 text_color = 'white' if luminance < 0.5 else 'black'
-
-#                 if p_value <= 0.01:
-#                 #include double asterisks for p-value <= 0.01
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})**',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=12,
-#                             color=text_color)
-#                 elif p_value <= 0.05:
-#                 #include single asterisks for p-value <= 0.05
-#                     ax.text(i + 0.5, j + 0.65, f'(p <= {p_value:.2f})*',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=12,
-#                             color=text_color)
-#                 else:
-#                     ax.text(i + 0.5, j + 0.65, f'(p = {p_value:.2f})',
-#                             horizontalalignment='center',
-#                             verticalalignment='center',
-#                             fontsize=12,
-#                             color=text_color)
-
-# # wrap labels
-# x_labels = [textwrap.fill(t.get_text(), 20) for t in ax.get_xticklabels()]
-# y_labels = [textwrap.fill(t.get_text(), 20) for t in ax.get_yticklabels()]
-
-# ax.set_xticklabels(x_labels, rotation=0, ha="center", fontsize=14)
-# ax.set_yticklabels(y_labels, rotation=0, ha="right", fontsize=14)
-
-# # fig.tight_layout()
-# fig.savefig(path_enc_ret, bbox_inches='tight')
-
-
-
-
-
-
-
-
-
 
 
 
