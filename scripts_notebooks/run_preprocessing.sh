@@ -1,6 +1,6 @@
 #!/bin/bash
 # script to run:
-my_script=$PWD/preprocessing.py
+my_script=$PWD/run_qc.py
 
 
 # submit for all subjects:

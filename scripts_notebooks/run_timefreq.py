@@ -7,8 +7,15 @@ import os
 import sys
 import matplotlib.pyplot as plt
 
+from matplotlib.gridspec import GridSpec
+from datetime import datetime
+
 # import variables and paths
 from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED
+
+# specify date
+now = datetime.now()
+date  =  now.strftime("%d-%m-%Y")
 
 # set system variables
 sub = sys.argv[1]
@@ -24,78 +31,80 @@ reconst_raw = mne.io.read_raw_fif(RAW_CLEANED_SUB, preload=True)
 events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
 events[:,2] = events[:, 2] - 64512
 
-# run epochs 
-keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'
-          ,'Fixation Onset Enc'}
-
+# define keys & events of interest
+keys = {'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target'}
 events_of_interest = {k: EVENT_DICT[k] for k in keys}
 
-epochs_cleaned = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1.5, tmax=1.5, baseline = None, reject_by_annotation=True, picks = 'eeg', on_missing="ignore")
 
-# Power estimates pooled over distraction
-epochs_left_target = epochs_cleaned[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
-epochs_right_target = epochs_cleaned[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
+## Replication of Syanah's analysis
+# 1. Stimulus-locked epochs (−2000 to 2000 ms) were extracted for encoding trials
+# baseline window: [-1.25 -1]; but this doesn't really make sense..
+epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin=-2.0, tmax = 2.0,  preload = True)
 
-## Compute TF power: 
-freqs = np.arange(2,30,2)
-n_cycles = freqs / 2
+# interpolate bad channels
+# TODO: I don't actually want to reset_bads in info object, find different way
+epochs_interpolated = epochs.copy().interpolate_bads(reset_bads=True)
 
-power_left = epochs_left_target.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-power_right = epochs_right_target.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+# subselection of epochs
+epochs_attend_left = epochs_interpolated[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
+epochs_attend_right = epochs_interpolated[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
+print(epochs_attend_left)
 
-# plotting time-freq power
-power_left.plot_joint(baseline=(-0.3, 0), mode="mean", tmin=-0.2, tmax=1, timefreqs=((0.1, 8), (.3, 8)))
-power_left.plot_topo(baseline=(-0.3, 0), mode="mean", title=f"{sub} Average Power - Left Enc Stimuli")
-power_right.plot_topo(baseline=(-0.3, 0), title=f"{sub} Average Power - Right Enc Stimuli") 
-
-
-
-###################################################################################################################################################################################################
-
-
-                                                                        ## Replication of Syanah's analysis
-
-
-##################################################################################################################################################################################################
-
-## 1. Identify the sensors in which alpha power was modulated strongly in the cue-target interval:
-# calculate difference between alpha power for attending left and attending right trials & applying cluster-based permutation test
-
-print("NOW RUNNING REPLICATION ANALYSIS")
-
-# not sure whether I should apply baseline correction or not
-epochs_cue_window = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin=-0.75, tmax = -0.25, baseline=None,  preload = True)
-
-epochs_attend_left = epochs_cue_window[['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Distraction Left Target']]
-
-epochs_attend_right = epochs_cue_window[['Encoding Stimulus Onset Baseline Right', 'Encoding Stimulus Onset Distraction Right Target']]
+# crop epochs to time window of: −750 to −250 ms
+epochs_attend_left_cropped = epochs_attend_left.copy().crop(tmin=-0.75, tmax=-0.25)
+print(epochs_attend_left_cropped)
 
 freqs = np.arange(2,30,2)
 
 n_cycles = freqs / 2
 
-# Compute PSD 
-# psd_wynn_left = epochs_wynn_attend_left.compute_psd(method='multitaper', tmin = -0.75, tmax = 0.75)
-# psd_wynn_right = epochs_wynn_attend_left.compute_psd(method = 'multitaper', tmin = -0.75, tmax = 0.75)
-
-
-# Compute TRF
+# Compute TRF: −750 to −250 ms were chosen for analysis 
 power_tf_left = epochs_attend_left.compute_tfr(method='multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
-power_tf_right = epochs_attend_left.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+power_tf_right = epochs_attend_right.compute_tfr(method = 'multitaper', freqs=freqs, n_cycles=n_cycles, average=True, decim=3)
+
+# Sanity checks 
+# of type.'mne.time_frequency.tfr.AverageTFR' (n_channels, n_frequencies, n_time_points)
+print(type(power_tf_left))
+print(power_tf_left.shape)
+print(power_tf_right.shape)
+
+# compute differences
+pmi_numerator = power_tf_left - power_tf_right
+pmi_denominator = power_tf_left + power_tf_right
+
+print(type(pmi_denominator))
+print(type(pmi_numerator))
+
+# compute power modulation index PMI: pmi_numerator / pmi_denominator
+# okay, so right now the interpolation doesn't seem to have worked
+pmi = pmi_numerator.get_data() / pmi_denominator.get_data()
+
+# numpy array 
+print('PMI Shape', type(pmi))
 
 
-# Compute TRF Difference (Left - Right)
-power_diff = power_tf_left - power_tf_right
+# FIXME: doesn't work
+# # convert back into AverageTFR object (not sure if this actually works though)
+# average_tfr = mne.time_frequency.AverageTFRArray(info=epochs_interpolated.info, data=pmi, times=pmi_denominator.times, freqs=freqs)
+# print(average_tfr.shape)
 
 
-print(type(power_diff))
+## Interpretation: For each hemisphere, positive PMI values indicate higher power when attending to the left hemifield as compared to the right,
+#  whereas negative values indicate the opposite.
 
-# plot power_diff
-power_diff.plot_topo(baseline=(-0.3, 0), mode="mean", title=f"{sub} Average Power - Left Enc Stimuli")
+# plot topo of pmi
+# fig, ax1 = plt.subplots(1)
+# im1, _ = mne.viz.plot_topomap(data = pmi, pos = epochs_attend_left.info, cmap = 'viridis', axes = ax1)
+# add subtitles
+# ax1.set_title("Power Modulation Index")
+# fig.colorbar(im1, ax=ax1, location = 'right', shrink=0.7, label='Power',  pad = 0.1)
+# fig.tight_layout()
+# fig.savefig(os.path.join(DERIV_DIR, 'timescales', 'topos', f'topo_time_freq_pmi_{date}.png'))
 
 
 
 
-# Brittas adivce: compute grand average or use get_data method and then divide on raw data
-# pmi_numerator = (power_left_good - power_right_good) 
-# pmi_denomenator = (power_left_good + power_right_good)
+
+
+
+

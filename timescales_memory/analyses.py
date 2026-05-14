@@ -154,7 +154,7 @@ def timescales_psd_evoked(sub, evoked):
     rsq_psd = np.zeros(len(ch_names))
     tau_psd = np.zeros(len(ch_names))
             
-    for ch in range(len(ch_names)):
+    for ch in range(psd_array.shape[0]):
 
         # initialize PSD object
         psd_fixation = PSD()
@@ -162,7 +162,7 @@ def timescales_psd_evoked(sub, evoked):
         # compute autocorrelation
         psd_fixation.compute_spectrum(evoked_data[ch][:], fs = evoked.info["sfreq"])
 
-        psd_fixation.fit(method='huber')
+        psd_fixation.fit(method='fooof', fooof_init={'peak_threshold': 2.5, 'peak_width_limits':[2, 12], 'max_n_peaks':4})
         psd_array[ch] = psd_fixation.params
         rsq_psd[ch] = psd_fixation.rsq
         tau_psd[ch] = psd_fixation.tau

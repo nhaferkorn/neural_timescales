@@ -1,4 +1,4 @@
-"""This script performs timescale analysis in the frequency domain."""
+"""This script performs timescale analysis on the Evoked objects  """
 
 # make imports 
 import os
@@ -9,17 +9,9 @@ import matplotlib.pyplot as plt
 import mne
 import fooof 
 
-# import functions from timescales package
-# from statsmodels.tsa.stattools import acf as compute_acf
-# from neurodsp.spectral import compute_spectrum
-# from neurodsp.spectral import compute_spectrum, trim_spectrum
-
-# # make imports from timescales methods
-# from timescales.conversions import knee_to_tau
-
 # import custom functions
-from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED, events_of_interest
-from timescales_memory.analyses import plot_reconst_raw, run_epochs, compute_psd, timescales_acf_evoked_np, timescales_psd_evoked_np, timescales_acf_single_trials
+from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED
+from timescales_memory.analyses import timescales_acf_evoked
 
 # set system variables
 sub = sys.argv[1]
@@ -35,68 +27,64 @@ reconst_raw = mne.io.read_raw_fif(RAW_CLEANED_SUB, preload=True)
 events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
 events[:,2] = events[:, 2] - 64512
 
+# define keys and events 
+keys = ['Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target', 
+        'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right']
+
+
+event_dist = {k: EVENT_DICT[k] for k in keys}
+
+
 # run epochs 
 print(f"\nNOW RUNNING EPOCHS FOR SUB-{sub}\n")
 
 # demean epochs
-epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1.5, tmax=1.5, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
-
-# crop epochs 
-epochs_crop = epochs.copy().crop(tmin=0.2, tmax=1.1)
+epochs = mne.Epochs(reconst_raw, events = events, event_id = event_dist, tmin = 1.2, tmax=2.1, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
 
 
-# check bad channels
-print("INFO OBJECT OF EPOCHS CROPPED INFO:", epochs_crop.info["bads"])
-
-# exclude bad channels
-chs_cleaned = [ch for ch in epochs_crop.ch_names if ch not in epochs_crop.info['bads']] 
-
-epochs_crop = epochs_crop.copy().pick_channels(chs_cleaned)
-print(epochs_crop.info)
-
-# TODO: compute drop log & save that information
-epochs_fix_enc = epochs_crop['Fixation Onset Enc']
-epochs_fix_ret = epochs_crop['Fixation Onset Ret']
-epochs_fix_all = epochs_crop[['Fixation Onset Enc','Fixation Onset Ret']]
+# interpolate bad channels
+epochs_interpolated = epochs.copy().interpolate_bads(reset_bads=False)
 
 
-evoked_fix_enc = epochs_fix_enc.average()
-evoked_fix_ret = epochs_fix_ret.average()
+# subselect epochs
+epochs_high = epochs_interpolated['Encoding Stimulus Onset Distraction Right Target', 'Encoding Stimulus Onset Distraction Left Target']
+epochs_low = epochs_interpolated['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right']
+
+
+
+# construct Evoked objects
+evoked_high = epochs_high.average()
+evoked_low = epochs_low.average()
+
 
 
 # FIT TIMESCALES ON EVOKED OBJECTS (NO OSC)
-acf_fitted, rsq_fitted = timescales_acf_evoked_np(sub, evoked_fix_enc, osc = False)
 
-# convert to pd.DataFrame
-df_wo = pd.DataFrame(acf_fitted, columns = ["tau", "height", "offset"])
+# High vs. Low Distraction Split
+evoked_list = [evoked_high, evoked_low]
+evoked_names = ['high', 'low']
 
-# add channel names
-# df_wo['ch_names'] = ch_names
+# loop over epoch objects and names
+for name, evoked in zip(evoked_names, evoked_list):
+        
+        acf_trials, rsq_trials = timescales_acf_evoked(sub=sub, evoked=evoked, osc=False)
 
-# add explained variance per channel
-df_wo['rsq'] = rsq_fitted
-print(df_wo.head(5))
+        # print their shape
+        print(acf_trials.shape)
+        print(rsq_trials.shape)
 
-# save as csv file
-df_wo.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_evoked_enc_without_osc.csv'), sep = ',', header = True, index = False)
+        # set channel index to match channel order of info object
+        chs_idx = evoked.info['ch_names']
 
-# FIT TIMESCALES ON EVOKED OBJECTs WITH OSCILLATIONS
-print('NOW FITTING WITH OSCILLATIONS\n')
+        # convert to pd.DataFrame
+        df = pd.DataFrame(acf_trials, columns = [f"tau_{name}", f"height_{name}", f"offset_{name}"])
 
-# fit timescales on evoked objects 
-acf_osc, rsq_osc = timescales_acf_evoked_np(sub, evoked_fix_enc, osc = True)
+        df["chs"] = chs_idx
+        df["sub"] = sub
+        df[f'rsq_{name}'] = rsq_trials
 
-# convert to pd.DataFrame
-df_osc = pd.DataFrame(acf_osc, columns = ["exp_tau", "osc_tau", "osc_gamma", "osc_freq", "amp_ratio", "height", "offset"])
 
-# add channel names
-# # df_osc['ch_names'] = ch_names
-
-# add explained variance per channel
-df_osc['rsq'] = rsq_fitted
-print(df_osc.head(5))
-
-# save as csv file
-df_osc.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_evoked_enc.csv'), sep = ',', header = True, index = False)
+        # save as csv file
+        df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'evoked', 'distraction', f'sub-{sub}_acf_params_evoked_{name}.csv'), sep = ',', header = True, index = False)
 
 

@@ -31,7 +31,6 @@ raw.set_annotations(rest_annotations + start_end_annotations + bad_annotations)
 print('COUNT', raw.annotations.count())
 
 # read bad channels
-# TODO: implement try switch logic to see whether bad channel list is not empty
 if os.path.exists(os.path.join(DERIV_DIR, "annotations", f"{param1}_bad_chs")):
     with open(os.path.join(DERIV_DIR, 'annotations', f'{param1}_bad_chs'), 'rb') as fp:
         bad_chs = pickle.load(fp)

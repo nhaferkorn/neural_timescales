@@ -11,41 +11,47 @@ import mne
 
 # import custom functions
 from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED, events_of_interest
-from timescales_memory.behavioral import read_behav_data, process_enc_data, process_ret_data, calculate_encoding_accuracy, create_behavioral_summary, calculate_retrieval_accuracy, calculate_hitrate, calculate_fa_rate
+from timescales_memory.behavioral import read_behav_data, process_enc_data, process_ret_data, calculate_encoding_task_performance, calculate_retrieval_task_performance, create_behavioral_summary, calculate_hitrate, calculate_fa_rate, calculate_hitrate_confidence, compute_dprime_targets_only
+
 
 # set system variables
-param1 = sys.argv[1]
+sub = sys.argv[1]
 
-# # print behavioral data from retrieval phase
-data_retrieval = read_behav_data(sub = param1, phase = 'ret')
+# behavioral data from encoding phase
+data_encoding = read_behav_data(sub=sub, phase='enc')
+print("BEHAVIORAL DATA FROM ENCODING:", data_encoding.head(5))
+data_enc = process_enc_data(sub=sub, data=data_encoding)
+
+# behavioral data from retrieval phase
+data_retrieval = read_behav_data(sub=sub, phase='ret')
 print("BEHAVIORAL DATA FROM RETRIEVAL:", data_retrieval.head(5))
-
-# data_enc = process_enc_data(sub = param1, data=data_encoding)
-data_ret = process_ret_data(sub = param1, data=read_behav_data(phase='ret', sub=param1))
-data_enc = process_enc_data(sub = param1, data=read_behav_data(phase='enc', sub=param1))
+data_ret = process_ret_data(sub=sub, data=data_retrieval)
 
 
-# calculate updated encoding accuracy
-# hitrate_low, hitrate_high, hitrate_dist = calculate_hitrate(data=data_ret, trial_wise=True)
+calculate_hitrate_confidence(data_ret)
 
-# print(hitrate_low)
-# print(hitrate_high)
-# print(hitrate_dist)
+print('Task performance Retrieval Phase:', calculate_retrieval_task_performance(data_ret))
 
+print('These are the hit rates:\n')
+hitrate_low, hitrate_high, hitrate_targets, hitrate_dist = calculate_hitrate(data=data_ret, trial_wise=True)
+print(hitrate_low)
+print(hitrate_high)
+print(hitrate_targets)
+print(hitrate_dist)
+
+
+hitrate = calculate_hitrate(data=data_ret)
+print('\nThis is the global hitrate:', hitrate)
 
 farate = calculate_fa_rate(data_ret)
+print("This is the farate:", farate, '\n')
 
-print("THIS IS THE FA RATE", farate)
+
+d_prime = compute_dprime_targets_only(data_ret)
+print("This is d prime:", d_prime, '\n')
 
 
-# accuracy_retrieval = calculate_retrieval_accuracy(data_ret)
-# print('ACCURACY RETRIEVAL', accuracy_retrieval)
+create_behavioral_summary(sub=sub, data_enc=data_enc, data_ret=data_ret)
 
-# hitrate = calculate_hitrate(data_ret)
 
-# ## check whether dropping NAN values has worked
-# assert data_enc['Enc_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
-# assert data_ret['Ret_RT'].isna().sum() == 0, "Not all NAN values were successfully dropped"
 
-print('\nCREATING BEHAVIORAL SUMMARY\n')
-create_behavioral_summary(sub=param1, data_enc=data_enc, data_ret=data_ret)

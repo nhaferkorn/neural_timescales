@@ -1,4 +1,4 @@
-"""This script performs timescale analysis."""
+"""This script performs timescale analysis in the frequency domain."""
 
 # make imports 
 import os
@@ -8,21 +8,17 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import mne
 import fooof 
-import pickle
 
 # import functions from timescales package
 from statsmodels.tsa.stattools import acf as compute_acf
-from neurodsp.spectral import compute_spectrum
 from neurodsp.spectral import compute_spectrum, trim_spectrum
 
-from timescales.sim import sim_ar
-from timescales.fit import ARPSD, PSD, ACF
-from timescales.autoreg import compute_ar_spectrum
-from timescales.plts import set_default_rc 
+# make imports from timescales methods
+from timescales.conversions import knee_to_tau
 
 # import custom functions
-from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED, events_of_interest
-from timescales_memory.analyses import plot_reconst_raw, run_epochs, compute_psd, timescales_enc_ret, timescales_acf_evoked, timescales_acf_evoked_np, timescales_psd_evoked_np
+from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED
+from timescales_memory.analyses import timescales_acf_evoked,  timescales_psd_evoked
 
 # set system variables
 sub = sys.argv[1]
@@ -42,159 +38,126 @@ events[:,2] = events[:, 2] - 64512
 # run epochs 
 print(f"\nNOW RUNNING EPOCHS FOR SUB-{sub}\n")
 
-# demean - entire epoch!
-epochs = mne.Epochs(reconst_raw, events = events, event_id = events_of_interest, tmin = -1.5, tmax=1.5, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
-
-# crop epochs 
-epochs_crop = epochs.copy().crop(tmin=0, tmax=1)
-
-print("INFO OBJECT OF EPOCHS CROPPED INFO:", epochs_crop.info)
-
-# TODO: compute drop log & save that information
-epochs_fix_enc = epochs_crop['Fixation Onset Enc']
-epochs_fix_ret = epochs_crop['Fixation Onset Ret']
-
-evoked_fix_enc = epochs_fix_enc.average()
-evoked_fix_ret = epochs_fix_ret.average()
-
-# plot the epochs to identify event-locked increases in power 
-# evoked_fix_enc.plot(titles=f"{sub} Evoked - Encoding (0s-1s)").savefig(os.path.join(DERIV_DIR, "evokeds", f'sub-{sub}_encoding.png'))
-
-## plots show that there are power deflections that are time-locked to around 200ms, which means I need to crop the epochs even more
-epochs_fix_enc_cropped = epochs_fix_enc.crop(tmin=0.2, tmax=1)
-evoked_fix_enc_cropped = epochs_fix_enc.average()
-
-# compute power and frequencies
-power, freqs = compute_psd(sub=sub, epochs = epochs_crop, events_of_interest = 'Fixation Onset Enc')
-
-print('POWER', power)
-print('FREQUENCY', freqs)
-
-print()
-
-print('SHAPE OF POWER', power.shape, '\n') # (31, 28); probably cause there's one bad channel!
-
-print('SHAPE OF FREQS', freqs.shape, '\n') # (28,)
-
-## FIXME: there is still something wrong with the function, the results don't really make sense (too similar across channels)
-# try running timescale analysis in frequency domain
-psd_fitted, rsq_fitted, tau_fitted = timescales_psd_evoked_np(sub=sub, evoked = evoked_fix_enc_cropped, freqs = freqs, power = power)
-
-# convert to pd.DataFrame
-df_psd = pd.DataFrame(psd_fitted, columns = ["offset", "knee_freq", "exp", "const"])
-
-# add channel names
-ch_names = epochs.info['ch_names']
-df_psd['ch_names'] = ch_names
-
-# add tau column
-df_psd['tau'] = tau_fitted
-
-# add explained variance per channel
-df_psd['RSQ'] = rsq_fitted
-
-print(df_psd.head(10))
-
-# now I also need to convert the knee frequency into tau
+# define keys and events 
+keys = ['Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Distraction Right Target', 
+        'Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right']
 
 
-
-# # and plot again
-# evoked_fix_enc_cropped.plot(titles=f"{sub} Evoked - Encoding (0.2s-1s)").savefig(os.path.join(DERIV_DIR, "evokeds", f'sub-{sub}_encoding_cropped.png'))
-
-# # set ch_names
-# ch_names = epochs.info['ch_names']
-
-# ## FIT WITHOUT OSCILLATIONS: fit timescales on evoked objects 
-# acf_fitted_wo, rsq_fitted_wo = timescales_acf_evoked_np(sub, evoked_fix_enc, osc = False)  # returns numpy array
-
-# # convert to pd.DataFrame
-# df_wo = pd.DataFrame(acf_fitted_wo, columns = ["tau", "height", "offset"])
-
-# # add channel names
-# df_wo['ch_names'] = ch_names
-
-# # add explained variance per channel
-# df_wo['RSQ'] = rsq_fitted_wo
-# print(df_wo.head(5))
-
-# # save as csv file
-# df_wo.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_evoked_enc_without_osc.csv'), sep = ',', header = True, index = False)
-
-# # ## FIT WITH OSCILLATIONS
-# # print('NOW FITTING WITH OSCILLATIONS\n')
-
-# # # fit timescales on evoked objects 
-# # acf_fitted, rsq_fitted = timescales_acf_evoked_np(sub, evoked_fix_enc, osc = True)
-
-# # # convert to pd.DataFrame
-# # df_osc = pd.DataFrame(acf_fitted, columns = ["exp_tau", "osc_tau", "osc_gamma", "osc_freq", "amp_ratio", "height", "offset"])
-
-# # # add channel names
-# # df_osc['ch_names'] = ch_names
-
-# # # add explained variance per channel
-# # df_osc['RSQ'] = rsq_fitted
-# # print(df_osc.head(5))
-
-# # # save as csv file
-# # df_osc.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_evoked_enc.csv'), sep = ',', header = True, index = False)
-
-# Fit timescales for batches of epochs (progression of the task!)
-## first figure out how I loop through epochs object and subselect them; I guess they are intrinsically ordered
-
-# print("LENGTH OF EPOCHS", len(epochs_fix_enc_cropped))
-
-# # for epoch in range(10):
-# #     print(epochs_fix_enc_cropped[epoch])
+event_dist = {k: EVENT_DICT[k] for k in keys}
 
 
-# # subsetting epochs object - okay so this does seem to work
-# # but I need to find criterion that is empirically motivated!
-# epochs_firstthird = epochs_fix_enc_cropped[0:130]
-# epochs_secondthird = epochs_fix_enc_cropped[130:260]
-# epochs_thirdthird = epochs_fix_enc_cropped[260:]
+# run epochs 
+print(f"\nNOW RUNNING EPOCHS FOR SUB-{sub}\n")
+
+# demean epochs
+epochs = mne.Epochs(reconst_raw, events = events, event_id = event_dist, tmin = 1.2, tmax=2.1, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
 
 
-# print("LENGTH EPOCHS FIRST THIRD", len(epochs_firstthird)) # 130
-# print("LENGTH EPOCHS SECOND THIRD", len(epochs_secondthird)) # 130
-# print("LENGTH EPOCHS FINAL THIRD", len(epochs_thirdthird)) # 129
+# interpolate bad channels
+epochs_interpolated = epochs.copy().interpolate_bads(reset_bads=True)
+
+
+# subselect epochs
+epochs_high = epochs_interpolated['Encoding Stimulus Onset Distraction Right Target', 'Encoding Stimulus Onset Distraction Left Target']
+epochs_low = epochs_interpolated['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right']
+
+
+# construct Evoked objects
+evoked_high = epochs_high.average()
+evoked_low = epochs_low.average()
+
+
+# RUN FOOOF BEFORE COMPUTING TIMESCALES
+# 1. calculate power spectrum across epoched data
+psd = evoked_high.compute_psd(method = "welch", fmin=1, fmax=30)
+
+spectra, freqs = psd.get_data(return_freqs=True)
+
+## 2. fit fooof
+# Initialize a FOOOFGroup object
+fg = fooof.FOOOFGroup(peak_width_limits=[2, 12], 
+                peak_threshold=2.5, max_n_peaks=4, verbose=False, aperiodic_mode = 'knee')
+
+# Define the frequency range to fit
+freq_range = [1, 30]
+
+# Fit the power spectrum model across all channels
+fg.fit(freqs, spectra, freq_range)
+
+# plot for multiple indices
+indices = range(1,30)
+
+chs = evoked_high.info['ch_names']
+print('# of chs: ', len(chs))
+
+# FIXME: 1 channel is being dropped
+# not sure if the order of channels is preserved when fitting psd in fooof
+for idx, ch in enumerate(chs):
+    fm = fg.get_fooof(ind=idx, regenerate=True)
+    fm.plot(file_path = os.path.join(DERIV_DIR, 'timescales', 'psd_timescales', 'evoked', 'fooof'), save_fig=True, file_name = f'sub-{sub}_fooof_{ch}', plt_log = True)
+
+
+# Print out results
+fg.print_results()
+
+
+# Extract knee frequencies
+knee = fg.get_params('aperiodic_params', 'knee')
+print('These are the knee frequencies', knee)
+
+# Convert into tau parameters
+tau_from_knee = knee_to_tau(knee)
+
+# save important psd_timescale params in csv file
+df_fooof_params = pd.DataFrame({
+    'knee': knee,
+    'tau_from_knee (s)': tau_from_knee
+})
+
+
+df_fooof_params['tau_ms'] = df_fooof_params['tau_from_knee (s)'] * 1000
+
+df_fooof_params['rsq'] = fg.get_params('r_squared')
+
+# mean rsq
+df_fooof_params['rsq_avg'] = df_fooof_params['rsq'].mean()
+
+df_fooof_params['sub'] = sub
+
+print(df_fooof_params.head())
+
+# save psd_timescale parameters as csv
+df_fooof_params.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'psd_timescales', f'sub-{sub}_fooof_params_evoked_high.csv'), sep = ',', header = True, index = False)
 
 
 
-# ####### Check if Timescales change across the epochs (but not sure if it makes sense to compute them on very short segments)
-# # crop epochs into three segments 
-# epochs_seg1 = epochs.copy().crop(tmin=0, tmax=0.3)
-# epochs_seg2 = epochs.copy().crop(tmin=0.3, tmax=0.6)
-# epochs_seg3 = epochs.copy().crop(tmin=0.6, tmax=1.0)
+## Estimate timescales from psd
+# High vs. Low Distraction Split
+evoked_list = [evoked_high, evoked_low]
+evoked_names = ['high', 'low']
 
-# # plot the evoked for encoding phase
-# epochs_seg1['Fixation Onset Enc'].average().plot(titles=f"{sub} Enc Evoked - First 300ms")
-# epochs_seg2['Fixation Onset Enc'].average().plot(titles=f"{sub} Enc Evoked - 300-600ms")
-# epochs_seg3['Fixation Onset Enc'].average().plot(titles=f"{sub} Enc Evoked - 600-1000ms")
+# loop over epoch objects and names
+for name, evoked in zip(evoked_names, evoked_list):
+        
+        psd_array, rsq_psd, tau_psd  = timescales_psd_evoked(sub=sub, evoked=evoked)
 
-# epochs_enc_seg1 = epochs_seg1['Fixation Onset Enc'].average()
-# epochs_enc_seg2 = epochs_seg2['Fixation Onset Enc'].average()
-# epochs_enc_seg3 = epochs_seg3['Fixation Onset Enc'].average()
+        # print their shape
+        print(psd_array.shape)
+        print(rsq_psd.shape)
+        print(tau_psd.shape)
 
-# list_epochs_segments = [epochs_enc_seg1, epochs_enc_seg2, epochs_enc_seg3]
+        # set channel index to match channel order of info object
+        chs_idx = evoked.info['ch_names']
 
-# for epoch in list_epochs_segments:
+        # # convert to pd.DataFrame
+        df = pd.DataFrame(psd_array, columns = [f"tau_{name}", f"height_{name}", f"offset_{name}"])
 
-#     # set ch_names
-#     ch_names = epochs.info['ch_names']
+        df["chs"] = chs_idx
+        df["sub"] = sub
+        df[f'rsq_{name}'] = rsq_psd
+        df[f'tau_{name}'] = tau_psd
 
-#     ## FIT WITHOUT OSCILLATIONS: fit timescales on evoked objects 
-#     acf_fitted_wo, rsq_fitted_wo = timescales_acf_evoked_np(sub, epoch, osc = False)  
+        # # save as csv file
+        # df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'psd_timescales', 'evoked', 'distraction', f'sub-{sub}_acf_params_evoked_{name}.csv'), sep = ',', header = True, index = False)
 
-#     df_wo = pd.DataFrame(acf_fitted_wo, columns = ["tau", "height", "offset"])
 
-#     # add channel names
-#     df_wo['ch_names'] = ch_names
-
-#     # add explained variance per channel
-#     df_wo['RSQ'] = rsq_fitted_wo
-#     print(df_wo.head(5))
-
-#     # save as csv file
-#     df_wo.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', f'sub-{sub}_acf_params_{epoch}_without_osc.csv'), sep = ',', header = True, index = False)

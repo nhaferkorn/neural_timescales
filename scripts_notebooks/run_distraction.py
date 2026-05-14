@@ -1,4 +1,4 @@
-"""This script splits the encoding trials into left and right high and low distraction trials. """
+"""This script splits the encoding trials into high and low distraction trials. """
 
 # make imports 
 import os
@@ -9,8 +9,8 @@ import matplotlib.pyplot as plt
 import mne
 
 # import custom functions
-from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_DIR, RAW_CLEANED, events_of_interest, keys
-from timescales_memory.analyses import plot_reconst_raw, run_epochs, compute_psd, timescales_acf_evoked_np, timescales_psd_evoked_np, timescales_acf_single_trials
+from timescales_memory.settings import EVENT_DICT, DERIV_DIR, RAW_CLEANED, keys
+from timescales_memory.analyses import timescales_acf_single_trials
 
 # set system variables
 sub = sys.argv[1]
@@ -38,30 +38,21 @@ event_dist = {k: EVENT_DICT[k] for k in keys}
 
 
 # construct & demean epochs
-epochs = mne.Epochs(reconst_raw, events = events, event_id = event_dist, tmin = 0, tmax=2.5, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
-
-
-# crop epochs (relative to stimulus onset)
-epochs_crop = epochs.copy().crop(tmin=1, tmax=2.1)
+epochs = mne.Epochs(reconst_raw, events = events, event_id = event_dist, tmin = 1.2, tmax=2.1, baseline = (None, None), reject_by_annotation=True, picks = 'eeg', on_missing="ignore", preload=True)
 
 
 # interpolate bad channels
-epochs_interpolated = epochs_crop.copy().interpolate_bads(reset_bads=False)
+epochs_interpolated = epochs.copy().interpolate_bads(reset_bads=False)
 
 
 # subselect epochs
-epochs_left = epochs_interpolated['Encoding Stimulus Onset Distraction Left Target', 'Encoding Stimulus Onset Baseline Left']
-epochs_right = epochs_interpolated['Encoding Stimulus Onset Distraction Right Target', 'Encoding Stimulus Onset Baseline Right']
-epochs_high_dist_right = epochs_interpolated['Encoding Stimulus Onset Distraction Right Target']
-epochs_high_dist_left = epochs_interpolated['Encoding Stimulus Onset Distraction Left Target']
-epochs_low_dist_right = epochs_interpolated['Encoding Stimulus Onset Baseline Right']
-epochs_low_dist_left = epochs_interpolated['Encoding Stimulus Onset Baseline Left']
+epochs_high = epochs_interpolated['Encoding Stimulus Onset Distraction Right Target', 'Encoding Stimulus Onset Distraction Left Target']
+epochs_low = epochs_interpolated['Encoding Stimulus Onset Baseline Left', 'Encoding Stimulus Onset Baseline Right']
 
 
-## Lateralization Split
-# maybe use enumerate to iterate over both 
-epochs_list = [epochs_right, epochs_left, epochs_high_dist_right, epochs_high_dist_left, epochs_low_dist_right, epochs_low_dist_left]
-epochs_names = ["right", "left", "high_right", "high_left", "low_right", "low_left"]
+# High vs. Low Distraction Split
+epochs_list = [epochs_high, epochs_low]
+epochs_names = ['high', 'low']
 
 # loop over epoch objects and names
 for name, epoch in zip(epochs_names, epochs_list):
@@ -87,6 +78,6 @@ for name, epoch in zip(epochs_names, epochs_list):
 
 
         # save as csv file
-        df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'lateralization', f'sub-{sub}_acf_params_{name}.csv'), sep = ',', header = True, index = False)
+        df.to_csv(path_or_buf = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'distraction', f'sub-{sub}_acf_params_{name}.csv'), sep = ',', header = True, index = False)
 
 

@@ -258,4 +258,11 @@ plt.show()
 
 # simulate different osc and aperiodic signals
 
-#
+# aperiodic activity is simulated as a power law time series, with a specified exponent
+# brown noise - exponent = -2 (does the sign matter??)
+sig_noise_brown = sim_powerlaw(n_seconds, fs, exponent = -2)
+sig_noise_white = sim_powerlaw(n_seconds, fs, exponent = 0)
+sig_noise_pink = sim_powerlaw(n_seconds, fs, exponent = -1)
+
+
+

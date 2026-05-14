@@ -69,44 +69,105 @@ def annotate_rest(raw, events, sub):
     # print for sanity check
     print('ANNOTATIONS START_END ', annotations_start_end)
 
+    ##########################################################
+
     # should result 2 annotations for most subjects
-    assert len(annotations_start_end) == 2, f'Not the right dimensions - expecting two markers but got {len(annotations_start_end)}'
+    # assert len(annotations_start_end) == 2, f'Not the right dimensions - expecting two markers but got {len(annotations_start_end)}'
     
-    ## annotate segments before start of encoding & after the end of retrieval
-    print(f"Start Encoding", annotations_start_end[0]["onset"])
-    print(f"End Retrieval", annotations_start_end[1]["onset"])
+#     ## annotate segments before start of encoding & after the end of retrieval
+#     print(f"Start Encoding", annotations_start_end[0]["onset"])
+#     print(f"End Retrieval", annotations_start_end[1]["onset"])
 
-    start_enc = annotations_start_end[0]["onset"]
-    # annotations_start_end[annotations_start_end.description == "Start Encoding"].onset[0]
+#     start_enc = annotations_start_end[0]["onset"]
+#     # annotations_start_end[annotations_start_end.description == "Start Encoding"].onset[0]
 
-    end_ret = annotations_start_end[1]["onset"]
-    # annotations_start_end[annotations_start_end.description == "End Retrieval"].onset[0]
+#     end_ret = annotations_start_end[1]["onset"]
+#     # annotations_start_end[annotations_start_end.description == "End Retrieval"].onset[0]
 
-    print('NEW START ENCODING', start_enc)
-    print('NEW END ENCODING', end_ret)
+#     print('NEW START ENCODING', start_enc)
+#     print('NEW END ENCODING', end_ret)
 
-    onsets = [raw.times[0], end_ret]
-    durations = [
-    start_enc,
-    raw.times[-1] - end_ret
-    ]
+#     onsets = [raw.times[0], end_ret]
+#     durations = [
+#     start_enc,
+#     raw.times[-1] - end_ret
+#     ]
 
-    start_end_annots = mne.Annotations(
-    onset=onsets,
-    duration=durations,
-    description=["BAD_PRE_EXP", "BAD_POST_EXP"],
-    orig_time=raw.info['meas_date']
-)
+#     start_end_annots = mne.Annotations(
+#     onset=onsets,
+#     duration=durations,
+#     description=["BAD_PRE_EXP", "BAD_POST_EXP"],
+#     orig_time=raw.info['meas_date']
+# )
     
-    # save start_end annotations
-    raw.set_annotations(start_end_annots)
-    print('LENGTH ONLY START-END ANNOTATIONS', len(raw.annotations))
+#     # save start_end annotations
+#     raw.set_annotations(start_end_annots)
+#     print('LENGTH ONLY START-END ANNOTATIONS', len(raw.annotations))
 
-    raw.annotations.save(os.path.join(DERIV_DIR, "annotations", f"{sub}-start_end_annotations.fif"), overwrite = True)
+#     raw.annotations.save(os.path.join(DERIV_DIR, "annotations", f"{sub}-start_end_annotations.fif"), overwrite = True)
+
+#     # plot start_end annotations
+#     print('NOW PLOTTING START_END ANNOTATIONS')
+#     raw.plot(block=True)
+
+    # alternative: if one of the start-end markers is missing (sub: 102)
+    if len(annotations_start_end) != 2:
+        print(f'Not the right dimensions - expecting two markers but got {len(annotations_start_end)}')
+
+    start_enc = None
+    end_ret = None
+
+    for ann in annotations_start_end:
+        if ann["description"] == "Start Encoding":
+            start_enc = ann["onset"]
+        elif ann["description"] == "End Retrieval":
+            end_ret = ann["onset"]
+
+    if start_enc is None or end_ret is None:
+        print("Missing one or both markers")
+
+    onsets = []
+    durations = []
+    descriptions = []
+
+    # check if Start Encoding exists
+    if start_enc is not None:
+        onsets.append(raw.times[0])
+        durations.append(start_enc)
+        descriptions.append("BAD_PRE_EXP")
+
+    # check if End Retention exists
+    if end_ret is not None:
+        onsets.append(end_ret)
+        durations.append(raw.times[-1] - end_ret)
+        descriptions.append("BAD_POST_EXP")
+
+    # Only create annotations if we actually have something
+    if len(onsets) > 0:
+        start_end_annots = mne.Annotations(
+            onset=onsets,
+            duration=durations,
+            description=descriptions,
+            orig_time=raw.info['meas_date']
+        )
+
+        raw.set_annotations(start_end_annots)
+        print('LENGTH ONLY START-END ANNOTATIONS', len(raw.annotations))
+
+        raw.annotations.save(
+            os.path.join(DERIV_DIR, "annotations", f"{sub}-start_end_annotations.fif"),
+            overwrite=True
+        )
+    else:
+        print("No valid markers found — no annotations created.")
+
 
     # plot start_end annotations
     print('NOW PLOTTING START_END ANNOTATIONS')
     raw.plot(block=True)
+
+
+
 
     ## Annotate rest periods 
     mapping_rests = {90:"Rest onset", 91:"Rest offset"}
@@ -216,8 +277,6 @@ def add_bad_channels(sub, raw):
 
     bad_chs = [ch.strip() for ch in bad_chs.split(',')]
 
-    
-    # TODO: save bad channels in raw info object & also as list for each subject
     with open(os.path.join(DERIV_DIR, 'annotations', f'{sub}_bad_chs'), 'wb') as fp:
         pickle.dump(bad_chs, fp)
 
@@ -247,10 +306,10 @@ def fit_ica(sub, raw):
         ica = mne.preprocessing.ICA(n_components=15, max_iter="auto", random_state=95)
         ica.fit(raw_ica_filtered, reject_by_annotation=True)
 
-        # Save ICA solution
+        # save ICA solution
         ica.save(os.path.join(DERIV_DIR, 'ica', f'{sub}' + '-ica.fif'), overwrite=True)
    
-        # Plot components
+        # plot components
         fig_sources = ica.plot_sources(raw_ica_filtered, title=f"AFTER: ICs Timecourses for Sub-{sub}", show_scrollbars=False) 
         fig_components = ica.plot_components(title=f"ICs for Sub-{sub}")
         fig_components.savefig(os.path.join(DERIV_DIR, "ica", f'{sub}_ics.png'))
@@ -291,12 +350,6 @@ def apply_ica(sub, raw):
         # select which components to exclude
         ica.exclude = components_loaded
 
-        # ica.apply changes raw object in-place, so let's make a copy first
-        ## FIXME: look into if I should apply ICA to the raw_ica_filtered data or the raw data directly!!
-
-        ## MNE DOCUMENTATION: However, because filtering is a linear operation, the ICA solution found from the filtered signal 
-        # can be applied to the unfiltered signal (see [2] for more information), so we’ll keep a copy of 
-        # the unfiltered Raw object around so we can apply the ICA solution to it later.
         reconst_raw = raw.copy()
         ica.apply(reconst_raw)
 
@@ -306,7 +359,7 @@ def apply_ica(sub, raw):
         print("\nSAVING CLEANED DATA\n ")
         reconst_fname = f'sub-{sub}-raw_cleaned.fif'
 
-        # think about adding a date to the file name
+        # save cleaned data
         reconst_raw.save(os.path.join(RAW_CLEANED, reconst_fname))
     
 if __name__ == "__main__":

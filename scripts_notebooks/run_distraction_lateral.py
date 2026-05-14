@@ -23,7 +23,7 @@ RAW_CLEANED_SUB = os.path.join(RAW_CLEANED, reconst_fname)
 reconst_raw = mne.io.read_raw_fif(RAW_CLEANED_SUB, preload=True)
 
 # find events
-events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False)
+events = mne.find_events(reconst_raw, stim_channel = "Status", initial_event=False, shortest_event=1)
 events[:,2] = events[:, 2] - 64512
 
 

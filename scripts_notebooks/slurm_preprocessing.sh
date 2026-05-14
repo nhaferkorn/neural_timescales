@@ -1,8 +1,6 @@
 #!/bin/bash
 #SBATCH --mem=16GB
 #SBATCH --time=00:10:00
-
-
 # middleman script for submitting analysis to HPC cluster
 # activates right conda environment
 # runs script: input 1 is the script, input 2 is the subject, as inherited from
