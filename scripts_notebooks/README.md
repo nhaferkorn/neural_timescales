@@ -4,7 +4,7 @@
 `run_preprocessing.py`: runs all of the preprocessing steps (filtering, annotations, ica etc.)
 `run_qc`: run quality control after preprocessing & plots the cleaned signal
 
-**Timescale analysis scripts:**  
+**Timescale Analysis scripts:**  
 On single-trial data:  
 `run_timescales_time.py`: perform single-trial timescale estimation in time-domain (on autocorrelation function, using acf fit)  
 
