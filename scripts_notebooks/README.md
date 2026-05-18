@@ -1,31 +1,19 @@
 # Scripts
 
 **Preprocessing scripts:**  
-i. `run_preprocessing.py`:  
-ii. `run_ica.py`:   
-iii. `run_qc`: run quality control after preprocessing, included: plotting the signal 
+`run_preprocessing.py`: runs all of the preprocessing steps (filtering, annotations, ica etc.)
+`run_qc`: run quality control after preprocessing & plots the cleaned signal
 
-**Timescale Analysis scripts:**  
-On single-trial level:  
+**Timescale analysis scripts:**  
+On single-trial data:  
 `run_timescales_time.py`: perform single-trial timescale estimation in time-domain (on autocorrelation function, using acf fit)  
-`run_timscales_freq.py`: perform single-trial timescale estimation in frequency domain (on psd, using fooof)  
-`run_timescales_bayesian.py`: fit generative models to estimate timescales (using aABC tau)
 
-On Evokeds:  
-`run_timescales_evoked.py`: perform timescale estimation on evoked objects.
+On trial-averaged data:  
+`timescales_evoked.py`: perform timescale estimation on trial-averaged data
 
-**Statistical Analysis scripts:**  
-`run_stats_age.py`: computes independent samples cluster permutation test to compare timescales between Old (> 40) and Young Adults. Also produces topoplots of age effect.  
+**Statistical analysis scripts:**  
+`run_stats_age.py`: computes independent samples cluster permutation test to compare timescales between Old (> 40) and Young Adults.  
 `run_stats_group.py`: computes 1samp cluster permutation test to compare high vs. low distraction timescales during the encoding phase.  
-`run_stats_lateral.py`: 
 
-
-**Other Analysis scripts**:
-`run_timefreq.py`: replicate time-frequency decomposition from Wynn et al.
+**Other analysis scripts**:
 `run_behavioral.py`: 
-
-**Jupyter Notebooks (for exploration & plotting)**:  
-`nb_behavioral_exploration.ipynb`: compute summary stats for behavioral data. Elaborate!
-`nb_timescales_exploration.ipynb`: check
-`nb_simulations.ipybn`: simulate periodic & aperiodic signal, compute autocorr & estimate timescales using neurodsp (visualization purposes!)
-
