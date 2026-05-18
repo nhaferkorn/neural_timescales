@@ -110,9 +110,9 @@ for subject in subjects:
 
 # ## Summary Stats
 # # # total number of trials
-print('Number of Trials')
-print(rsq_high)
-print(rsq_low)
+# print('Number of Trials')
+# print(rsq_high)
+# print(rsq_low)
 
 # # mean number of poor trials rejected across all subjects
 # print(np.array(count_rsq_high_poor).mean())
@@ -161,7 +161,8 @@ print('TAU LOW Trials', tau_low_mean)
 tau_diff_grandavg = tau_high_grandavg - tau_low_grandavg
 
 
-
+#########################################################################################################
+# Plotting 
 # Plot input data
 fig = plt.figure(figsize=(10, 4))
 gs = GridSpec(1, 3)
@@ -183,12 +184,11 @@ fig.colorbar(im3, ax=ax3, shrink=0.5, location = 'bottom', label='tau (s)', pad 
 ax1.text(-0.125, 1.1, 'a', ha='center', va='center', transform=ax1.transAxes, fontsize=14, fontweight='bold')
 ax2.text(-0.125, 1.1, 'b', ha='center', va='center', transform=ax2.transAxes, fontsize=14, fontweight='bold')
 ax3.text(-0.125, 1.1, 'c', ha='center', va='center', transform=ax3.transAxes, fontsize=14, fontweight='bold')
-# fig.subplots_adjust(top=0.1, wspace=0.4, hspace=0.4)
 fig.tight_layout(rect=[0, 0, 1, 0.92])
 fig.savefig(os.path.join(DERIV_DIR, 'figures', f'topos_distraction_{date}.pdf'),bbox_inches='tight')
 
 
-
+## as boxplots
 # boxplot with custom colors
 tau_high_mean = tau_high_array.mean(axis=1)
 tau_low_mean = tau_low_array.mean(axis=1)
@@ -262,16 +262,6 @@ fig.savefig(os.path.join(DERIV_DIR, 'figures', f'barplot_distraction_{date}.pdf'
 
 
 
-# # try to compute manual Wilcoxon signed rank test (cause I have averaged over subjects, I don't need to control for multiple comparisons I think)
-print('Computing Wilcoxon')
-result = sp.stats.wilcoxon(tau_high_grandavg, tau_low_grandavg, alternative = 'two-sided') 
-print(result)
-
-# tau_high_sem = sp.stats.sem(tau_high_subject_mean)
-# tau_low_sem = sp.stats.sem(tau_low_subject_mean)
-# print(tau_high_sem)
-# print(tau_low_sem)
-
 # Compute Stats, maybe start with simple t-test
 print('Computing Cluster Permutation Test')
 p_value = 0.05
@@ -326,20 +316,16 @@ for i_clu, clu_idx in enumerate(good_cluster_inds):
 
 
 # check info object
-ch_names = np.array(infos[1]['ch_names'])
-print(ch_names[ch_inds])
+# ch_names = np.array(infos[1]['ch_names'])
+# print(ch_names[ch_inds])
 
-
-for idx, name in enumerate(infos[1]['ch_names']):
-    print(idx, name)
-
-
+# for idx, name in enumerate(infos[1]['ch_names']):
+#     print(idx, name)
 
 
 
 
-
-# plot topographies
+# plot topographies with cluster sensors marked in white
 fig = plt.figure(figsize=(10, 4))
 sel = mne.pick_types(infos[1], eeg=True)
 info = mne.pick_info(infos[1], sel)
@@ -373,7 +359,6 @@ vmax3 = np.max(np.abs(tau_diff_grandavg * 1000))
 vmax3 = np.round(vmax3 * 2) / 2
 vlim3 = (-vmax3, vmax3)
 
-# plot topomaps (always runs)
 im1, _ = mne.viz.plot_topomap(
     tau_high_grandavg * 1000,
     info,
@@ -445,20 +430,7 @@ fig.savefig(
     bbox_inches='tight')
 
 
-
-
-
-# tau_high_subject_mean = tau_high_array.mean(axis=1)  # mean per subject
-# tau_high_grandavg = tau_high_subject_mean.mean()     # mean across subjects
-
-# tau_low_subject_mean = tau_low_array.mean(axis=1)
-# tau_low_grandavg = tau_low_subject_mean.mean()
-
-# print('High Grandavg', tau_high_grandavg)
-# print('Low GrandAvg', tau_low_grandavg)
-
-
-
+## compute descriptive stats
 # mean across channels for each subject
 tau_high_subject_mean = tau_high_array.mean(axis=1)
 tau_low_subject_mean = tau_low_array.mean(axis=1)
