@@ -1,12 +1,12 @@
 # Scripts
 
 **Preprocessing scripts:**  
-i. `run_preprocessing.py`:  
+i. `preprocessing.py`:  
 ii. `run_ica.py`:   
-iii. `run_qc`: run quality control after preprocessing, included: plotting the signal 
+iii. `run_qc`: run quality control after preprocessing & plots the cleaned signal
 
 **Timescale Analysis scripts:**  
-On single-trial level:  
+On Single-trial level:  
 `run_timescales_time.py`: perform single-trial timescale estimation in time-domain (on autocorrelation function, using acf fit)  
 `run_timscales_freq.py`: perform single-trial timescale estimation in frequency domain (on psd, using fooof)  
 `run_timescales_bayesian.py`: fit generative models to estimate timescales (using aABC tau)
@@ -20,12 +20,12 @@ On Evokeds:
 `run_stats_lateral.py`: 
 
 
-**Other Analysis scripts**:
+**Other Analysis Scripts**:
 `run_timefreq.py`: replicate time-frequency decomposition from Wynn et al.
 `run_behavioral.py`: 
 
 **Jupyter Notebooks (for exploration & plotting)**:  
-`nb_behavioral_exploration.ipynb`: compute summary stats for behavioral data. Elaborate!
+`nb_behavioral_exploration.ipynb`: compute summary stats for behavioral data. 
 `nb_timescales_exploration.ipynb`: check
 `nb_simulations.ipybn`: simulate periodic & aperiodic signal, compute autocorr & estimate timescales using neurodsp (visualization purposes!)
 
