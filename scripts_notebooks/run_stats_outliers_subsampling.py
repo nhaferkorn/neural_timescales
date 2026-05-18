@@ -1,4 +1,4 @@
-"""This script computes statistics for the distraction contrast and plots them as topographies."""
+"""This script computes statistics for the subsampled!! distraction contrast and plots them as topographies."""
 
 # make imports 
 import os
@@ -20,7 +20,9 @@ from timescales_memory.settings import PROJECT_DIR, EEG_DIR, EVENT_DICT, DERIV_D
 
 # specify subjects & list to exclude
 exclude = [102, 105, 110, 115, 116, 123, 133]
+
 subjects = [f"sub-{i}" for i in range(101, 162) if i not in exclude]
+
 
 # specify date
 now = datetime.now()
@@ -42,10 +44,11 @@ tau_log_low = []
 for subject in subjects:
 
     # construct filepath
-    file_path_high = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'distraction', f'{subject}_acf_params_high.csv')
-    file_path_low = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'distraction', f'{subject}_acf_params_low.csv')
+    file_path_high = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'distraction_subsampled', f'{subject}_acf_params_high.csv')
+    file_path_low = os.path.join(DERIV_DIR, 'timescales', 'acf_timescales', 'single_trials', 'distraction_subsampled', f'{subject}_acf_params_low.csv')
     info_path = os.path.join(DERIV_DIR, 'info', f'{subject}_info.fif')
 
+    
     # read info object
     if os.path.exists(info_path):
         info = mne.io.read_info(info_path)
@@ -107,28 +110,27 @@ for subject in subjects:
         tau_log_low.append(df_tau_low_log_trialavg)
 
 
-
 # ## Summary Stats
-# # # total number of trials
-# print('Number of Trials')
-# print(rsq_high)
-# print(rsq_low)
+# total number of trials
+print('Number of Trials')
+print(rsq_high)
+print(rsq_low)
 
 # # mean number of poor trials rejected across all subjects
 # print(np.array(count_rsq_high_poor).mean())
 # print(np.array(count_rsq_low_poor).mean())
 
-# # stack to get rsq arrays
-# rsq_high_array = np.stack(rsq_high)
-# rsq_low_array = np.stack(rsq_low)
+# stack to get rsq arrays
+rsq_high_array = np.stack(rsq_high)
+rsq_low_array = np.stack(rsq_low)
 
-# # compute & print grand mean of rsq
-# rsq_high_grandavg = rsq_high_array.mean(axis=0)
-# rsq_low_grandavg = rsq_low_array.mean(axis=0)
+# compute & print grand mean of rsq
+rsq_high_grandavg = rsq_high_array.mean(axis=0)
+rsq_low_grandavg = rsq_low_array.mean(axis=0)
 
-# print('PRINTING RSQ GRANDAVG')
-# print('HIGH', rsq_high_grandavg)
-# print('LOW', rsq_low_grandavg)
+print('PRINTING RSQ GRANDAVG')
+print('HIGH', rsq_high_grandavg)
+print('LOW', rsq_low_grandavg)
 
 # stack arrays
 tau_high_array = np.stack(tau_raw_high)
@@ -150,28 +152,30 @@ tau_log_diff_array = tau_log_high_array - tau_log_low_array # log-ratio
 tau_high_grandavg = tau_high_array.mean(axis=0) 
 tau_low_grandavg = tau_low_array.mean(axis=0)
 
-# mean only over channels
+
+# # mean only over channels
 tau_high_mean = tau_high_array.mean(axis=1)
 tau_low_mean = tau_low_array.mean(axis=1)
 
-print('TAU HIGH Trials', tau_high_mean)
-print('TAU LOW Trials', tau_low_mean)
+# print('TAU HIGH MEAN', tau_high_mean)
+# print('TAU LOW MEAN', tau_low_mean)
 
-# compute difference array
+# # compute difference array
 tau_diff_grandavg = tau_high_grandavg - tau_low_grandavg
 
+print('Print Difference Array')
+print(tau_diff_grandavg)
 
-#########################################################################################################
-# Plotting 
+
 # Plot input data
 fig = plt.figure(figsize=(10, 4))
 gs = GridSpec(1, 3)
 ax1 = fig.add_subplot(gs[0, 0])
 ax2 = fig.add_subplot(gs[0, 1])
 ax3 = fig.add_subplot(gs[0, 2])
-im1, _ = mne.viz.plot_topomap(data = tau_high_grandavg, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax1)
-im2, _ = mne.viz.plot_topomap(data = tau_low_grandavg, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax2)
-im3, _ = mne.viz.plot_topomap(data = tau_diff_grandavg, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax3)
+im1, _ = mne.viz.plot_topomap(data = tau_high_grandavg*1000, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax1)
+im2, _ = mne.viz.plot_topomap(data = tau_low_grandavg*1000, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax2)
+im3, _ = mne.viz.plot_topomap(data = tau_diff_grandavg*1000, pos = infos[1], cmap = 'viridis', ch_type='eeg', axes = ax3)
 # add subtitles
 ax1.set_title("High Dist")
 ax2.set_title("Low Dist")
@@ -184,83 +188,22 @@ fig.colorbar(im3, ax=ax3, shrink=0.5, location = 'bottom', label='tau (s)', pad 
 ax1.text(-0.125, 1.1, 'a', ha='center', va='center', transform=ax1.transAxes, fontsize=14, fontweight='bold')
 ax2.text(-0.125, 1.1, 'b', ha='center', va='center', transform=ax2.transAxes, fontsize=14, fontweight='bold')
 ax3.text(-0.125, 1.1, 'c', ha='center', va='center', transform=ax3.transAxes, fontsize=14, fontweight='bold')
+# fig.subplots_adjust(top=0.1, wspace=0.4, hspace=0.4)
 fig.tight_layout(rect=[0, 0, 1, 0.92])
-fig.savefig(os.path.join(DERIV_DIR, 'figures', f'topos_distraction_{date}.pdf'),bbox_inches='tight')
-
-
-## as boxplots
-# boxplot with custom colors
-tau_high_mean = tau_high_array.mean(axis=1)
-tau_low_mean = tau_low_array.mean(axis=1)
-
-colors = ['lightsteelblue', 'steelblue']
-labels=['Low Dist', 'High Dist']
-fig, ax = plt.subplots()
-
-bplot = ax.boxplot([tau_low_mean*1000, tau_high_mean*1000],
-                    # showmeans=True,
-                    medianprops={"color": "white", "linewidth": 0.8},
-                    patch_artist=True,
-                    tick_labels=labels, widths=0.5)
-# fill with colors
-for patch, color in zip(bplot['boxes'], colors):
-    patch.set_facecolor(color)
-
-ax.set_ylabel('Tau (ms)', fontsize=16, color='dimgray')
-ax.set_xlabel('Condition',fontsize=16, color='dimgray')
-ax.set_ylim(0, 100)
-ax.tick_params(axis='y', color='gray', length=4, direction='out',
-                       labelcolor='dimgray', grid_color='blue', labelsize=14)
-ax.tick_params(axis='x', color='gray', length=4, direction='out',
-                       labelcolor='dimgray', grid_color='blue', labelsize=14)
-
-# remove top spine
-for spine in ['top', 'right']:
-    ax.spines[spine].set_visible(False)
-
-fig.tight_layout()
-
-# save plot
-fig.savefig(os.path.join(DERIV_DIR, 'figures',  f'boxplot_distraction_{date}.png'))
+fig.savefig(os.path.join(DERIV_DIR, 'figures', f'topos_distraction_subsampled_{date}.pdf'),bbox_inches='tight')
 
 
 
-# barplot distraction contrast
-# turn numpy arrays into pandas dataframe in order to make better plots
-tau_high_pd = pd.DataFrame(tau_high_array.mean(axis=1))
-tau_low_pd = pd.DataFrame(tau_low_array.mean(axis=1))
 
+# # try to compute manual Wilcoxon signed rank test (cause I have averaged over subjects, I don't need to control for multiple comparisons I think)
+print('Computing Wilcoxon')
+result = sp.stats.wilcoxon(tau_high_grandavg, tau_low_grandavg, alternative = 'two-sided') 
+print(result)
 
-col = tau_high_pd.columns[0]
-
-df = pd.concat([
-    tau_low_pd.rename(columns={col: "Tau"}).assign(Group='Low Dist'),
-    tau_high_pd.rename(columns={col: "Tau"}).assign(Group='High Dist')
-])
-
-# add seaborn barplot
-fig, ax = plt.subplots()
-
-sns.barplot(
-    data=df, x='Group', y='Tau', order=['Low Dist', 'High Dist'],
-    errorbar='se', capsize=.1, alpha=.8,
-    ax=ax, palette=colors, width=0.5)
-ax.yaxis.set_major_formatter(FuncFormatter(lambda y, _: f'{y*1000:.0f}'))
-ax.set_ylabel('Tau (ms)', fontsize=14, color='dimgray')
-ax.set_xlabel('Condition', fontsize=14, color='dimgray')
-ax.set_ylabel('Tau (ms)', fontsize=14, color='dimgray')
-ax.set_ylim(0, 0.07) 
-# ax.set_xticklabels(['YA', 'OA'], fontsize=12)
-ax.spines['top'].set_visible(False)
-ax.spines['right'].set_visible(False)
-# Style ticks (better approach)
-ax.tick_params(axis='x', labelsize=12, colors='dimgray')
-ax.tick_params(axis='y', labelsize=12, colors='dimgray')
-# fig.suptitle('All Fixation', fontsize=16, color='dimgray')
-fig.subplots_adjust(top=0.85)
-fig.savefig(os.path.join(DERIV_DIR, 'figures', f'barplot_distraction_{date}.pdf'), bbox_inches="tight")
-
-
+# tau_high_sem = sp.stats.sem(tau_high_subject_mean)
+# tau_low_sem = sp.stats.sem(tau_low_subject_mean)
+# print(tau_high_sem)
+# print(tau_low_sem)
 
 # Compute Stats, maybe start with simple t-test
 print('Computing Cluster Permutation Test')
@@ -291,6 +234,7 @@ print(cluster_p_values)
 print(T_obs)
 print(T_obs.shape)
 print('Clusters', clusters)
+print('Cluster p-values', cluster_p_values)
 
 # this kinda works, but is definitely not the most elegant way
 good_cluster_inds = np.where(cluster_p_values < 0.05)[0]
@@ -298,7 +242,11 @@ print("Good clusters: %i" % len(good_cluster_inds))
 print('Good cluster indices', good_cluster_inds)
 
 
+# find the relevant sensors
 pos = mne.find_layout(infos[1], ch_type='eeg').pos
+
+T_obs_max = 5.
+T_obs_min = -T_obs_max
 
 # loop over significant clusters
 for i_clu, clu_idx in enumerate(good_cluster_inds):
@@ -315,17 +263,93 @@ for i_clu, clu_idx in enumerate(good_cluster_inds):
     mask[ch_inds, :] = True
 
 
-# check info object
+# # check info object
 # ch_names = np.array(infos[1]['ch_names'])
 # print(ch_names[ch_inds])
+
+
+# print(infos[1]['ch_names'])
 
 # for idx, name in enumerate(infos[1]['ch_names']):
 #     print(idx, name)
 
 
+# ### final attempt - to actually plot all significant sensorsa
+# fig = plt.figure(figsize=(10, 4))
+# sel = mne.pick_types(infos[1], eeg=True)
+# info = mne.pick_info(infos[1], sel)
+# # how to mark sensors in the cluster
+# mask_params = dict(marker='.', markerfacecolor='w', markersize=11)
+# gs = GridSpec(1, 3)
+# ax1 = fig.add_subplot(gs[0, 0])
+# ax2 = fig.add_subplot(gs[0, 1])
+# ax3 = fig.add_subplot(gs[0, 2])
+
+# # find the relevant sensors
+# pos = mne.find_layout(infos[1], ch_type='eeg').pos
+
+# T_obs_max = 5.
+# T_obs_min = -T_obs_max
+
+# vmax = np.max(np.abs(tau_diff_grandavg))
+# vmin = -vmax
 
 
-# plot topographies with cluster sensors marked in white
+# pos_2d = mne.find_layout(infos[1]).pos[:, :2]
+
+# # loop over significant clusters
+# for i_clu, clu_idx in enumerate(good_cluster_inds):
+
+#     # unpack cluster information, get unique indices per cluster
+#     space_inds = np.squeeze(clusters[clu_idx])
+#     ch_inds = np.unique(space_inds)
+
+#     # get topography for stats and average across time
+#     T_obs_map = T_obs
+
+#     # create a spatial mask
+#     mask = np.zeros((T_obs_map.shape[0], 1), dtype=bool)
+#     mask[ch_inds, :] = True
+
+
+#     im1, _ = mne.viz.plot_topomap(data = tau_high_grandavg*1000, pos = info, cmap = 'viridis', ch_type='eeg', axes = ax1)
+#     im2, _ = mne.viz.plot_topomap(data = tau_low_grandavg*1000, pos = info, cmap = 'viridis', ch_type='eeg', axes = ax2)
+#     im3, _ = mne.viz.plot_topomap(tau_diff_grandavg*1000, info, ch_type='eeg', mask=mask, 
+#                             axes=ax3, sensors=False,
+#                             mask_params=mask_params,
+#                             # vlim=(vmin, vmax),
+#                             show=False,cmap='viridis')
+#     # fig.colorbar(image, ax=ax_topo, location = 'right', shrink=0.7, label='t-value',  pad = 0.1)
+#     # add subtitles
+#     ax1.set_title("High Dist")
+#     ax2.set_title("Low Dist")
+#     ax3.set_title("High Dist-Low Dist")
+# # add colorbars directly next to the topomap axes
+# fig.colorbar(im1, ax=ax1, location = 'bottom', shrink=0.5, label=r'$\tau$ (ms)',  pad = 0.1)
+# fig.colorbar(im2, ax=ax2, shrink=0.5, location = 'bottom', label=r'$\tau$ (ms)', pad = 0.1)
+# fig.colorbar(im3, ax=ax3, shrink=0.5, location = 'bottom', label=r'$\tau$ (ms)', pad = 0.1)
+
+# # add figure numbering 
+# ax1.text(-0.125, 1.1, 'a', ha='center', va='center', transform=ax1.transAxes, fontsize=14, fontweight='bold')
+# ax2.text(-0.125, 1.1, 'b', ha='center', va='center', transform=ax2.transAxes, fontsize=14, fontweight='bold')
+# ax3.text(-0.125, 1.1, 'c', ha='center', va='center', transform=ax3.transAxes, fontsize=14, fontweight='bold')
+# fig.savefig(os.path.join(DERIV_DIR, 'figures', f'topos_distraction_markers_subsampled_{date}.png'),bbox_inches='tight')
+
+
+# tau_high_subject_mean = tau_high_array.mean(axis=1)  # mean per subject
+# tau_high_grandavg = tau_high_subject_mean.mean()     # mean across subjects
+
+# tau_low_subject_mean = tau_low_array.mean(axis=1)
+# tau_low_grandavg = tau_low_subject_mean.mean()
+
+# print('High Grandavg', tau_high_grandavg)
+# print('Low GrandAvg', tau_low_grandavg)
+
+
+
+
+
+# plot topographies
 fig = plt.figure(figsize=(10, 4))
 sel = mne.pick_types(infos[1], eeg=True)
 info = mne.pick_info(infos[1], sel)
@@ -359,6 +383,7 @@ vmax3 = np.max(np.abs(tau_diff_grandavg * 1000))
 vmax3 = np.round(vmax3 * 2) / 2
 vlim3 = (-vmax3, vmax3)
 
+# plot topomaps (always runs)
 im1, _ = mne.viz.plot_topomap(
     tau_high_grandavg * 1000,
     info,
@@ -426,25 +451,6 @@ ax3.text(0.0, 1.015, "c", transform=ax3.transAxes,
 
 # save
 fig.savefig(
-    os.path.join(DERIV_DIR, 'figures', f'topos_distraction_markers_allclusters_{date}.png'),
+    os.path.join(DERIV_DIR, 'figures', f'topos_distraction_markers_subsampling_{date}.png'),
     bbox_inches='tight')
 
-
-## compute descriptive stats
-# mean across channels for each subject
-tau_high_subject_mean = tau_high_array.mean(axis=1)
-tau_low_subject_mean = tau_low_array.mean(axis=1)
-
-# grand mean across subjects
-tau_high_grandavg = tau_high_subject_mean.mean()
-tau_low_grandavg = tau_low_subject_mean.mean()
-
-# standard deviation across subjects
-tau_high_sd = tau_high_subject_mean.std(ddof=1)
-tau_low_sd = tau_low_subject_mean.std(ddof=1)
-
-print('High Grandavg', tau_high_grandavg)
-print('High SD', tau_high_sd)
-
-print('Low Grandavg', tau_low_grandavg)
-print('Low SD', tau_low_sd)
