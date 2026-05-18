@@ -6,8 +6,8 @@ We re-analyzed a data set that includes a manipulation of episodic memory in you
 This project seeks to eprxamine the relationship between cognitive variables and neural timescales.
 Specifically, we contrast timescales following high-distraction stimuli and low-distraction stimuli during the encoding phase.
 
-
 ## Repo Structure 
-All analysis scripts can be found in the scripts_notebooks folder, which is organized as follows:
+All analysis scripts can be found in the scripts_notebooks folder.
+Helper functions can be found in the timescales_memory folder.
 
 
